@@ -1,0 +1,96 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{parskip}
+\usepackage{titlesec}
+\usepackage{xcolor}
+
+\definecolor{accent}{RGB}{30,80,160}
+
+\hypersetup{colorlinks=true, linkcolor=accent, urlcolor=accent}
+
+\titleformat{\section}{\large\bfseries\color{accent}}{}{0em}{}[\titlerule]
+\titleformat{\subsection}{\normalsize\bfseries}{}{0em}{}
+
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{\textbf{WanderSync} \textit{--- Task 1: Requirements \& Subsystems}}
+\rhead{Team 15}
+\rfoot{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+
+\begin{document}
+
+\begin{center}
+  {\LARGE\bfseries Task 1: Requirements and Subsystems}\\[0.4em]
+  {\large WanderSync: Dynamic Itinerary, Disruption Management and Social Travel Hub}\\[0.2em]
+  {\normalsize Team 15}
+\end{center}
+
+\vspace{1em}
+
+% ================================================================
+\section{Functional Requirements}
+% ================================================================
+
+The following functional requirements define the observable behaviours the WanderSync system must
+provide. Each requirement is expressed as a user story and tagged with its architectural significance.
+
+\subsection{FR1 --- User Authentication and Account Management}
+
+\textit{As a traveller, I want to register with an email and password, log in, and maintain a personal
+profile, so that my itineraries and preferences are securely associated with my account.}
+
+\textbf{Architectural significance:} Drives stateless JWT-based session management and the separation
+of the Authentication Service from domain logic. Establishes security boundaries respected by every
+other subsystem.
+
+\subsection{FR2 --- Unified Booking Aggregation}
+
+\textit{As a traveller, I want to import booking confirmations from multiple providers (flights, hotels,
+local transport) into a single normalised view, so that all travel details are accessible in one place.}
+
+\textbf{Architectural significance:} Requires an Adapter layer per provider with a common
+\texttt{BookingRecord} interface. Adding a new provider must touch no more than 2 files outside the
+adapter module --- directly constraining the architecture towards low coupling and high cohesion.
+
+\subsection{FR3 --- Chronological Itinerary Timeline}
+
+\textit{As a traveller, I want to view all my bookings as a time-ordered timeline, so that I can
+understand the sequence and gaps in my travel plan at a glance.}
+
+\textbf{Architectural significance:} Requires the Itinerary Management Service to own an
+authoritative, sorted view assembled from heterogeneous booking records. Timeline assembly is a
+read-heavy, cacheable operation that informs the caching strategy.
+
+\subsection{FR4 --- Real-Time Disruption Detection and Notification}
+
+\textit{As a traveller, I want to be automatically notified when a disruption (flight delay,
+cancellation, or severe weather) affects my itinerary, and to receive suggested alternatives, so
+that I can re-plan with minimal effort.}
+
+\textbf{Architectural significance:} This is the most architecturally significant requirement. It
+mandates an Event-Driven Architecture in which the Disruption Detection Service subscribes to
+external feeds via a message broker, processes events asynchronously, and publishes
+\texttt{DisruptionEvent} messages consumed by the Notification and Itinerary services. This
+decoupling is the primary driver of the chosen architectural style.
+
+\subsection{FR5 --- Privacy-Preserving Social Travel Synchronisation}
+
+\textit{As a traveller who opts in, I want to discover other users whose itineraries overlap with
+mine in time and region, and to connect with them through a bilateral consent flow, so that I can
+coordinate ride-shares or social activities while retaining control over my location data.}
+
+\textbf{Architectural significance:} Requires geospatial indexing for efficient region-based
+matching and a consent state machine (none $\to$ city-level $\to$ precise) that enforces the
+privacy NFR at the data layer, not only the presentation layer.
+
+\end{document}
