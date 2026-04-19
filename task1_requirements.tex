@@ -20,7 +20,7 @@
 
 \pagestyle{fancy}
 \fancyhf{}
-\lhead{\textbf{WanderSync} \textit{--- Task 1: Requirements \& Subsystems}}
+\lhead{\textbf{WanderSync} \textit{Task 1: Requirements \& Subsystems}}
 \rhead{Team 15}
 \rfoot{\thepage}
 \renewcommand{\headrulewidth}{0.4pt}
@@ -44,7 +44,7 @@
 The following functional requirements define the observable behaviours the WanderSync system must
 provide. Each requirement is expressed as a user story and tagged with its architectural significance.
 
-\subsection{FR1 --- User Authentication and Account Management}
+\subsection{FR1:User Authentication and Account Management}
 
 \textit{As a traveller, I want to register with an email and password, log in, and maintain a personal
 profile, so that my itineraries and preferences are securely associated with my account.}
@@ -53,16 +53,16 @@ profile, so that my itineraries and preferences are securely associated with my 
 of the Authentication Service from domain logic. Establishes security boundaries respected by every
 other subsystem.
 
-\subsection{FR2 --- Unified Booking Aggregation}
+\subsection{FR2:Unified Booking Aggregation}
 
 \textit{As a traveller, I want to import booking confirmations from multiple providers (flights, hotels,
 local transport) into a single normalised view, so that all travel details are accessible in one place.}
 
 \textbf{Architectural significance:} Requires an Adapter layer per provider with a common
 \texttt{BookingRecord} interface. Adding a new provider must touch no more than 2 files outside the
-adapter module --- directly constraining the architecture towards low coupling and high cohesion.
+adapter module:directly constraining the architecture towards low coupling and high cohesion.
 
-\subsection{FR3 --- Chronological Itinerary Timeline}
+\subsection{FR3:Chronological Itinerary Timeline}
 
 \textit{As a traveller, I want to view all my bookings as a time-ordered timeline, so that I can
 understand the sequence and gaps in my travel plan at a glance.}
@@ -71,7 +71,7 @@ understand the sequence and gaps in my travel plan at a glance.}
 authoritative, sorted view assembled from heterogeneous booking records. Timeline assembly is a
 read-heavy, cacheable operation that informs the caching strategy.
 
-\subsection{FR4 --- Real-Time Disruption Detection and Notification}
+\subsection{FR4:Real-Time Disruption Detection and Notification}
 
 \textit{As a traveller, I want to be automatically notified when a disruption (flight delay,
 cancellation, or severe weather) affects my itinerary, and to receive suggested alternatives, so
@@ -83,7 +83,7 @@ external feeds via a message broker, processes events asynchronously, and publis
 \texttt{DisruptionEvent} messages consumed by the Notification and Itinerary services. This
 decoupling is the primary driver of the chosen architectural style.
 
-\subsection{FR5 --- Privacy-Preserving Social Travel Synchronisation}
+\subsection{FR5:Privacy-Preserving Social Travel Synchronisation}
 
 \textit{As a traveller who opts in, I want to discover other users whose itineraries overlap with
 mine in time and region, and to connect with them through a bilateral consent flow, so that I can
@@ -93,4 +93,216 @@ coordinate ride-shares or social activities while retaining control over my loca
 matching and a consent state machine (none $\to$ city-level $\to$ precise) that enforces the
 privacy NFR at the data layer, not only the presentation layer.
 
+
+% ================================================================
+\section{Non-Functional Requirements}
+% ================================================================
+
+Each NFR is documented using the six-part quality-attribute scenario framework. The
+\textit{Response Measure} column provides the verifiable acceptance criterion used during testing.
+
+\subsection{NFR1:Performance: Response Time}
+
+\begin{tabularx}{\textwidth}{L{3.5cm}X}
+\toprule
+\textbf{Scenario Element} & \textbf{Description} \\
+\midrule
+Source            & End user via web browser \\
+Stimulus          & Navigates to the itinerary timeline page \\
+Artifact          & Frontend layer and Itinerary Management Service \\
+Environment       & Runtime; standard broadband connection; normal system load \\
+Response          & Page renders with all booking data fully visible \\
+Response Measure  & Complete render in under \textbf{3 seconds} from initial request; external API
+                    calls resolved within \textbf{5 seconds} with a loading indicator shown after
+                    2 seconds \\
+\bottomrule
+\end{tabularx}
+
+\textbf{Architectural significance:} Drives in-process caching of itinerary timelines and
+asynchronous, non-blocking API calls to external providers.
+
+\vspace{1em}
+
+\subsection{NFR2:Reliability: Disruption Detection Accuracy}
+
+\begin{tabularx}{\textwidth}{L{3.5cm}X}
+\toprule
+\textbf{Scenario Element} & \textbf{Description} \\
+\midrule
+Source            & External flight-tracking or weather-alert API \\
+Stimulus          & Publishes a disruption event (delay, cancellation, or weather warning) \\
+Artifact          & Disruption Detection Service \\
+Environment       & Runtime; system actively monitoring subscribed feeds \\
+Response          & System detects the disruption, evaluates impact on active itinerary, and
+                    delivers a notification with suggested alternatives \\
+Response Measure  & At least \textbf{17 of 20} simulated disruption test cases correctly
+                    identified and notified (\textbf{85\% accuracy}); notification delivered
+                    within 10 seconds of event arrival \\
+\bottomrule
+\end{tabularx}
+
+\textbf{Architectural significance:} Requires an event queue for guaranteed delivery, a retry
+mechanism for transient API failures, and graceful degradation (user-facing error message, no
+crash) on unrecoverable provider errors.
+
+\vspace{1em}
+
+\subsection{NFR3:Security: Authentication and Data in Transit}
+
+\begin{tabularx}{\textwidth}{L{3.5cm}X}
+\toprule
+\textbf{Scenario Element} & \textbf{Description} \\
+\midrule
+Source            & Unauthenticated or malicious user \\
+Stimulus          & Attempts to access a protected resource or transmit credentials \\
+Artifact          & Authentication Service and API Gateway \\
+Environment       & Runtime; any network condition \\
+Response          & Request rejected at the gateway; user redirected to login; all
+                    communication encrypted \\
+Response Measure  & \textbf{100\%} of protected endpoints require a valid JWT (24-hour expiry);
+                    passwords stored with \textbf{bcrypt}; all client--server traffic over
+                    \textbf{HTTPS only} \\
+\bottomrule
+\end{tabularx}
+
+\textbf{Architectural significance:} Drives stateless authentication at the API Gateway, centralised
+token validation middleware, and TLS termination at the entry point rather than per service.
+
+\vspace{1em}
+
+\subsection{NFR4:Privacy: Location Disclosure Control}
+
+\begin{tabularx}{\textwidth}{L{3.5cm}X}
+\toprule
+\textbf{Scenario Element} & \textbf{Description} \\
+\midrule
+Source            & Authenticated user browsing social matching results \\
+Stimulus          & Views the profile of another user with whom no consent has been established \\
+Artifact          & Social Synchronisation Service \\
+Environment       & Runtime; consent state between the two users is \textit{none} \\
+Response          & Only a city-level region label is returned; precise coordinates and
+                    itinerary details remain withheld \\
+Response Measure  & \textbf{Zero} instances of precise location leakage before bilateral opt-in,
+                    verified by integration tests; location data not persisted beyond the active
+                    session unless explicitly saved by the user \\
+\bottomrule
+\end{tabularx}
+
+\textbf{Architectural significance:} Requires a consent state machine enforced at the data-access
+layer (not merely the UI), and a geospatial abstraction that returns progressively detailed
+coordinates based on consent level.
+
+\vspace{1em}
+
+\subsection{NFR5:Modifiability: Provider Extensibility}
+
+\begin{tabularx}{\textwidth}{L{3.5cm}X}
+\toprule
+\textbf{Scenario Element} & \textbf{Description} \\
+\midrule
+Source            & Developer extending the system \\
+Stimulus          & Integrates a new travel provider (e.g., a new airline or hotel API) \\
+Artifact          & Booking Aggregation Service and its provider adapter module \\
+Environment       & Development time; existing adapters and core services unchanged \\
+Response          & New provider added by implementing the \texttt{BookingAdapter} interface and
+                    registering it; no changes required to core services \\
+Response Measure  & Changes confined to \textbf{at most 2 files} outside the dedicated adapter
+                    module, verifiable by code review and diff inspection \\
+\bottomrule
+\end{tabularx}
+
+\textbf{Architectural significance:} Directly mandates the Adapter design pattern with a shared
+\texttt{BookingAdapter} interface and a factory or registry for dynamic provider loading.
+
+% ================================================================
+\section{Subsystem Overview}
+% ================================================================
+
+WanderSync is decomposed into six subsystems. Each subsystem owns a well-defined responsibility
+boundary and communicates with others through explicit interfaces or a message broker.
+
+\subsection{Subsystem 1:API Gateway and Frontend Layer}
+
+\textbf{Role:} Single external entry point for all client requests; serves the React single-page
+application; enforces HTTPS and routes authenticated requests to the appropriate backend service.
+
+\textbf{Responsibilities:}
+\begin{itemize}[noitemsep]
+  \item TLS termination and HTTPS enforcement for all traffic.
+  \item Request routing to Authentication, Itinerary, Disruption, and Social services.
+  \item JWT validation middleware applied before forwarding any protected request.
+  \item Static asset delivery for the React frontend.
+\end{itemize}
+
+\subsection{Subsystem 2:Authentication and User Management Service}
+
+\textbf{Role:} Manages user identity, credential storage, session tokens, and profile data. All
+other services trust JWTs issued by this subsystem.
+
+\textbf{Responsibilities:}
+\begin{itemize}[noitemsep]
+  \item User registration with bcrypt password hashing.
+  \item Login, JWT issuance (24-hour expiry), and token refresh.
+  \item Profile CRUD (display name, preferences, linked provider accounts).
+  \item Session invalidation on explicit logout.
+\end{itemize}
+
+\subsection{Subsystem 3:Booking Aggregation Service}
+
+\textbf{Role:} Adapts data from multiple external travel provider APIs into a canonical
+\texttt{BookingRecord} schema. Shields the rest of the system from provider-specific data formats.
+
+\textbf{Responsibilities:}
+\begin{itemize}[noitemsep]
+  \item Implements a \texttt{BookingAdapter} interface per provider (flight, hotel, transport).
+  \item Fetches and normalises raw provider responses into \texttt{BookingRecord} objects.
+  \item Forwards normalised records to the Itinerary Management Service.
+  \item Enforces the extensibility NFR: a new provider requires only one new adapter file plus
+        one registration entry.
+\end{itemize}
+
+\subsection{Subsystem 4:Itinerary Management Service}
+
+\textbf{Role:} Authoritative store and assembler for a user's complete itinerary. Owns the
+itinerary data store and produces the chronological timeline consumed by the frontend.
+
+\textbf{Responsibilities:}
+\begin{itemize}[noitemsep]
+  \item CRUD operations on itinerary entities and their constituent booking records.
+  \item Chronological timeline assembly from heterogeneous \texttt{BookingRecord} objects.
+  \item Caching of assembled timelines to satisfy the 3-second load NFR.
+  \item Consuming \texttt{DisruptionEvent} messages to mark affected bookings and trigger
+        re-ordering.
+\end{itemize}
+
+\subsection{Subsystem 5:Disruption Detection Service}
+
+\textbf{Role:} Continuously monitors external flight-status and weather-alert feeds. On detecting
+an event that affects a stored itinerary, it evaluates the impact and publishes a
+\texttt{DisruptionEvent} to the internal message broker.
+
+\textbf{Responsibilities:}
+\begin{itemize}[noitemsep]
+  \item Polling or webhook subscription to flight-tracking and weather APIs.
+  \item Impact evaluation: cross-referencing incoming events against active itineraries.
+  \item Publishing \texttt{DisruptionEvent} messages (affected booking IDs, severity, alternatives)
+        to the message broker.
+  \item Maintaining an event log for the 85\% accuracy NFR to be tested against simulated cases.
+\end{itemize}
+
+\subsection{Subsystem 6:Social Synchronisation Service}
+
+\textbf{Role:} Identifies users whose itineraries overlap in time and geographic region, manages
+the bilateral consent state machine, and enforces privacy-preserving location disclosure rules.
+
+\textbf{Responsibilities:}
+\begin{itemize}[noitemsep]
+  \item Geospatial indexing of anonymised itinerary waypoints for region-based matching.
+  \item Consent state machine: \textit{none} $\to$ \textit{city-level} $\to$ \textit{precise},
+        transitioned only by explicit bilateral opt-in actions.
+  \item Returns only city-level labels to users whose consent state is \textit{none}.
+  \item Purges raw location data at session end unless the user explicitly saves it.
+\end{itemize}
+
 \end{document}
+
