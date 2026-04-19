@@ -1,0 +1,80 @@
+@startuml adr003_adapter
+skinparam classAttributeIconSize 0
+skinparam backgroundColor white
+skinparam class {
+  BackgroundColor #EEF3FF
+  BorderColor #1E50A0
+  FontColor #1E50A0
+  HeaderBackgroundColor #1E50A0
+  HeaderFontColor white
+}
+skinparam arrow {
+  Color #1E50A0
+}
+skinparam interface {
+  BackgroundColor #FFFDE7
+  BorderColor #B8860B
+}
+
+title ADR-003: BookingAdapter Class Structure
+
+class BookingRecord {
+  + bookingId: String
+  + userId: String
+  + provider: String
+  + type: BookingType
+  + startTime: DateTime
+  + endTime: DateTime
+  + details: Map<String, String>
+}
+
+interface BookingAdapter {
+  + fetch(userId: String): List<BookingRecord>
+}
+
+class FlightAdapter {
+  - apiKey: String
+  - baseUrl: String
+  + fetch(userId: String): List<BookingRecord>
+}
+
+class HotelAdapter {
+  - apiKey: String
+  - baseUrl: String
+  + fetch(userId: String): List<BookingRecord>
+}
+
+class TransportAdapter {
+  - apiKey: String
+  - baseUrl: String
+  + fetch(userId: String): List<BookingRecord>
+}
+
+class ProviderRegistry {
+  - adapters: Map<String, BookingAdapter>
+  + register(id: String, adapter: BookingAdapter): void
+  + get(id: String): BookingAdapter
+  + getAll(): List<BookingAdapter>
+}
+
+class BookingAggregationService {
+  - registry: ProviderRegistry
+  + aggregateBookings(userId: String): List<BookingRecord>
+}
+
+FlightAdapter    ..|> BookingAdapter : implements
+HotelAdapter     ..|> BookingAdapter : implements
+TransportAdapter ..|> BookingAdapter : implements
+
+ProviderRegistry o-- BookingAdapter : holds
+
+BookingAggregationService --> ProviderRegistry : uses
+BookingAdapter ..> BookingRecord : returns
+
+note right of BookingAdapter
+  Adding a new provider requires:
+  1. One new Adapter class file
+  2. One registration entry
+  — zero other changes
+end note
+@enduml

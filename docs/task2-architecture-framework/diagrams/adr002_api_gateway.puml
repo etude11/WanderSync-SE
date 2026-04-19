@@ -1,0 +1,53 @@
+@startuml adr002_api_gateway
+skinparam backgroundColor white
+skinparam node {
+  BackgroundColor #EEF3FF
+  BorderColor #1E50A0
+  FontColor #1E50A0
+}
+skinparam artifact {
+  BackgroundColor #F5F5F5
+  BorderColor #888888
+}
+skinparam arrow {
+  Color #1E50A0
+  FontColor #333333
+}
+
+title ADR-002: API Gateway Deployment Topology
+
+node "Client Browser" as Client
+
+node "API Gateway" as GW {
+  artifact "TLS Termination" as TLS
+  artifact "JWT Validation\nMiddleware" as JWT
+  artifact "CORS Handler" as CORS
+  artifact "Request Router" as Router
+}
+
+node "Backend Services\n(internal network)" {
+  node "Auth Service" as Auth
+  node "Booking Aggregation Service" as Bookings
+  node "Itinerary Service" as Itinerary
+  node "Disruption Service" as Disruption
+  node "Social Service" as Social
+}
+
+Client --> GW : HTTPS (port 443)
+TLS --> JWT
+JWT --> CORS
+CORS --> Router
+
+Router --> Auth      : /auth/**
+Router --> Bookings  : /bookings/**
+Router --> Itinerary : /itinerary/**
+Router --> Disruption : /disruption/**
+Router --> Social    : /social/**
+
+note right of GW
+  All services unreachable
+  directly from internet.
+  Gateway enforces 401 on
+  invalid / missing JWT.
+end note
+@enduml

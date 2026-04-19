@@ -1,0 +1,50 @@
+@startuml adr004_jwt_auth
+skinparam backgroundColor white
+skinparam sequence {
+  ActorBackgroundColor #EEF3FF
+  ActorBorderColor #1E50A0
+  ParticipantBackgroundColor #EEF3FF
+  ParticipantBorderColor #1E50A0
+  ArrowColor #1E50A0
+  LifeLineBorderColor #1E50A0
+  NoteBackgroundColor #FFFDE7
+  NoteBorderColor #B8860B
+}
+
+title ADR-004: JWT Authentication Flow
+
+actor "Client Browser" as Client
+participant "API Gateway" as GW
+participant "Auth Service" as Auth
+participant "Backend Service\n(e.g. Itinerary)" as Backend
+database "User DB" as DB
+
+== Login / Token Issuance ==
+
+Client -> GW : POST /auth/login\n{ email, password }
+GW -> Auth   : forward (no JWT required for /auth/**)
+Auth -> DB   : lookup user by email
+DB --> Auth  : { userId, hashedPassword, role }
+Auth -> Auth : bcrypt.compare(password, hash)
+Auth --> GW  : 200 OK  { token: <JWT> }\nsigned HS256, claims: { userId, role }, exp: 24h
+GW --> Client: 200 OK  { token: <JWT> }
+
+note over Client
+  Client stores JWT in memory.
+  Attaches on every request:
+  Authorization: Bearer <JWT>
+end note
+
+== Authenticated Request ==
+
+Client -> GW : GET /itinerary\nAuthorization: Bearer <JWT>
+GW -> GW     : verify JWT signature + expiry
+alt JWT invalid or expired
+  GW --> Client : 401 Unauthorized
+else JWT valid
+  GW -> Backend : GET /itinerary\nX-User-Id: <userId>\nX-User-Role: <role>
+  Backend -> Backend : trust decoded claims\n(no auth DB call)
+  Backend --> GW  : 200 OK { itinerary }
+  GW --> Client   : 200 OK { itinerary }
+end
+@enduml

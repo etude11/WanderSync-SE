@@ -1,0 +1,58 @@
+@startuml adr001_event_driven
+skinparam componentStyle rectangle
+skinparam backgroundColor white
+skinparam component {
+  BackgroundColor #EEF3FF
+  BorderColor #1E50A0
+  FontColor #1E50A0
+}
+skinparam database {
+  BackgroundColor #FFF8E1
+  BorderColor #B8860B
+  FontColor #333333
+}
+skinparam arrow {
+  Color #1E50A0
+  FontColor #333333
+}
+skinparam note {
+  BackgroundColor #FFFDE7
+  BorderColor #B8860B
+}
+
+title ADR-001: Event-Driven Disruption Detection Pipeline
+
+package "External Sources" {
+  [Flight Tracking API] as FlightAPI
+  [Weather Alert API] as WeatherAPI
+}
+
+package "WanderSync Backend" {
+  [Disruption Detection Service] as DDS
+  database "Event Log" as EventLog
+  [Message Broker\n(Redis Pub/Sub)] as Broker
+  [Itinerary Management Service] as IMS
+}
+
+FlightAPI --> DDS : webhook / poll (HTTPS)
+WeatherAPI --> DDS : webhook / poll (HTTPS)
+
+DDS --> EventLog : persist DisruptionEvent\n(for 85% accuracy audit)
+DDS --> Broker   : publish DisruptionEvent
+
+note right of Broker : topic: disruptions
+
+Broker --> IMS : fan-out — update affected bookings\n+ deliver user notification
+
+note bottom of DDS
+  Publishes:
+  { bookingId, severity,
+    alternatives[], timestamp }
+end note
+
+note right of IMS
+  Single consumer per task1 subsystem design.
+  Marks affected bookings and triggers
+  user-facing notification delivery.
+end note
+@enduml
