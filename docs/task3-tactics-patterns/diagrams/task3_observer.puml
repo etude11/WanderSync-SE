@@ -1,0 +1,55 @@
+@startuml task3_observer
+skinparam classAttributeIconSize 0
+skinparam classFontStyle bold
+skinparam backgroundColor white
+skinparam class {
+  BorderColor #1E50A0
+  HeaderBackgroundColor #E8EEF8
+  ArrowColor #1E50A0
+}
+
+interface IDisruptionObserver {
+  +onDisruption(event: DisruptionEvent): void
+}
+
+class DisruptionEvent {
+  -flightId: String
+  -type: DisruptionType
+  -timestamp: Instant
+  +getFlightId(): String
+  +getType(): DisruptionType
+  +getTimestamp(): Instant
+}
+
+class DisruptionEventPublisher {
+  -observers: List<IDisruptionObserver>
+  +register(observer: IDisruptionObserver): void
+  +deregister(observer: IDisruptionObserver): void
+  +notifyObservers(event: DisruptionEvent): void
+}
+
+class NotificationObserver {
+  +onDisruption(event: DisruptionEvent): void
+}
+
+class ItineraryFlagObserver {
+  +onDisruption(event: DisruptionEvent): void
+}
+
+class SocialAlertObserver {
+  +onDisruption(event: DisruptionEvent): void
+}
+
+DisruptionEventPublisher o--> "0..*" IDisruptionObserver : observers
+DisruptionEventPublisher ..> DisruptionEvent : publishes
+
+NotificationObserver   ..|> IDisruptionObserver
+ItineraryFlagObserver  ..|> IDisruptionObserver
+SocialAlertObserver    ..|> IDisruptionObserver
+
+note right of DisruptionEventPublisher
+  Subject: iterates observers list
+  and calls onDisruption() on each
+  registered observer.
+end note
+@enduml

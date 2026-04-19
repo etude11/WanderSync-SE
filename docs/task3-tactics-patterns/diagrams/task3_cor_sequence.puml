@@ -1,0 +1,36 @@
+@startuml task3_cor_sequence
+skinparam backgroundColor white
+skinparam sequenceArrowColor #1E50A0
+skinparam sequenceParticipantBorderColor #1E50A0
+skinparam sequenceParticipantBackgroundColor #E8EEF8
+skinparam sequenceLifeLineBorderColor #1E50A0
+skinparam noteBorderColor #1E50A0
+
+actor Client
+participant GatewayController
+participant RateLimitHandler
+participant AuthHandler
+participant SchemaValidationHandler
+participant AuditLogHandler
+participant BookingAggregationService
+
+Client -> GatewayController : POST /booking
+
+GatewayController -> RateLimitHandler : handle(request)
+note right: Check request rate\nagainst Redis counter
+RateLimitHandler -> AuthHandler : handle(request)
+
+alt Invalid JWT
+  AuthHandler --> GatewayController : 401 Unauthorized
+  GatewayController --> Client : 401 Unauthorized
+else Valid JWT
+  AuthHandler -> SchemaValidationHandler : handle(request)
+  note right: Validate request body\nagainst schema
+  SchemaValidationHandler -> AuditLogHandler : handle(request)
+  AuditLogHandler -> GatewayController : forward
+  note right: Log request metadata;\nalways passes through
+  GatewayController -> BookingAggregationService : forward(request)
+  BookingAggregationService --> GatewayController : 200 OK + payload
+  GatewayController --> Client : 200 OK + payload
+end
+@enduml

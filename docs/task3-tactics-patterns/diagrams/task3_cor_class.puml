@@ -1,0 +1,53 @@
+@startuml task3_cor_class
+skinparam classAttributeIconSize 0
+skinparam classFontStyle bold
+skinparam backgroundColor white
+skinparam class {
+  BorderColor #1E50A0
+  HeaderBackgroundColor #E8EEF8
+  ArrowColor #1E50A0
+}
+
+abstract class RequestHandler {
+  #next: RequestHandler
+  +setNext(handler: RequestHandler): RequestHandler
+  +{abstract} handle(request: ApiRequest): ApiResponse
+}
+
+class RateLimitHandler {
+  +handle(request: ApiRequest): ApiResponse
+}
+
+class AuthHandler {
+  +handle(request: ApiRequest): ApiResponse
+}
+
+class SchemaValidationHandler {
+  +handle(request: ApiRequest): ApiResponse
+}
+
+class AuditLogHandler {
+  +handle(request: ApiRequest): ApiResponse
+}
+
+class GatewayController {
+  -chain: RequestHandler
+  +buildChain(): void
+  +process(request: ApiRequest): ApiResponse
+}
+
+RequestHandler --> RequestHandler : next
+
+RateLimitHandler       --|> RequestHandler
+AuthHandler            --|> RequestHandler
+SchemaValidationHandler --|> RequestHandler
+AuditLogHandler        --|> RequestHandler
+
+GatewayController --> RequestHandler : chain
+
+note bottom of GatewayController
+  Builds chain at startup:
+  RateLimit -> Auth ->
+  SchemaValidation -> AuditLog
+end note
+@enduml
