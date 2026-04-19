@@ -1,0 +1,239 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{parskip}
+\usepackage{titlesec}
+\usepackage{xcolor}
+\usepackage{longtable}
+
+\definecolor{accent}{RGB}{30,80,160}
+
+\hypersetup{colorlinks=true, linkcolor=accent, urlcolor=accent}
+
+\titleformat{\section}{\large\bfseries\color{accent}}{}{0em}{}[\titlerule]
+\titleformat{\subsection}{\normalsize\bfseries}{}{0em}{}
+
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{\textbf{WanderSync} \textit{Task 2: Stakeholder Identification}}
+\rhead{Team 15}
+\rfoot{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+
+\begin{document}
+
+\begin{center}
+  {\LARGE\bfseries Task 2: Stakeholder Identification}\\[0.4em]
+  {\large WanderSync: Dynamic Itinerary, Disruption Management and Social Travel Hub}\\[0.2em]
+  {\normalsize Team 15}
+\end{center}
+
+\vspace{1em}
+
+% ================================================================
+\section{IEEE 42010 Architecture Framework}
+% ================================================================
+
+This document applies the IEEE/ISO/IEC 42010:2011 standard for systems and software engineering
+architecture descriptions. The standard defines a systematic way to document the architecture of a
+system by identifying \textit{stakeholders}, their \textit{concerns}, the \textit{viewpoints} that
+frame those concerns, and the \textit{views} that instantiate each viewpoint for WanderSync.
+
+% ================================================================
+\section{Stakeholders and Concerns}
+% ================================================================
+
+An architecture description must address the concerns of all relevant stakeholders. The following
+table enumerates the stakeholders of WanderSync and the architectural concerns each holds. A concern
+is any interest that a stakeholder has in the system that is architecturally relevant.
+
+\vspace{0.5em}
+\begin{tabularx}{\textwidth}{L{3.8cm}X}
+\toprule
+\textbf{Stakeholder} & \textbf{Architectural Concerns} \\
+\midrule
+\textbf{Traveller} (end user) &
+  Accuracy and completeness of the unified itinerary timeline; timely delivery of disruption
+  notifications; enforcement of location privacy before bilateral consent; learnability and
+  responsiveness of the interface (3-second page load). \\
+\addlinespace
+\textbf{Development Team} &
+  Modifiability and low coupling (new booking provider must touch $\leq$2 files outside the
+  adapter module); testability of core service functions ($\geq$60\% line coverage); clear module
+  boundaries for parallel development; onboarding speed (new team member can run the system
+  locally within 15 minutes). \\
+\addlinespace
+\textbf{System Administrator / DevOps} &
+  Deployability on standard hosting infrastructure; availability and crash-free operation during
+  all planned demonstration scenarios; observability through structured logging; straightforward
+  configuration of environment variables and secrets. \\
+\addlinespace
+\textbf{Travel Provider} (external API) &
+  Stability of the integration contract exposed by the adapter interface; isolation from changes
+  in other providers; well-defined error propagation so that a provider outage does not cascade. \\
+\addlinespace
+\textbf{Privacy Regulator / Compliance} &
+  Data minimisation: no precise location stored beyond the active session unless explicitly saved;
+  zero location leakage before bilateral opt-in; consent state enforced at the data-access layer,
+  not only the UI; all credentials handled with bcrypt and transmitted over HTTPS. \\
+\bottomrule
+\end{tabularx}
+
+% ================================================================
+\section{Viewpoints}
+% ================================================================
+
+A \textit{viewpoint} is a specification of the conventions used to construct and use a view. Each
+viewpoint below names the stakeholder concerns it addresses and describes the modelling conventions
+and notation used in its corresponding view.
+
+\subsection{Viewpoint 1: Functional Viewpoint}
+
+\textbf{Addresses concerns of:} Traveller, Development Team.
+
+\textbf{Purpose:} Describes the functional decomposition of WanderSync into subsystems and the
+responsibilities and interfaces of each. Answers the question: \textit{what does the system do and
+how is that responsibility partitioned?}
+
+\textbf{Modelling conventions:} UML component diagram showing subsystems as components, provided
+and required interfaces, and connector types (REST, message broker, direct function call).
+
+\subsection{Viewpoint 2: Information Viewpoint}
+
+\textbf{Addresses concerns of:} Traveller, Privacy Regulator.
+
+\textbf{Purpose:} Describes the key data entities managed by the system, their ownership, lifecycle,
+and the rules governing their disclosure. Answers: \textit{what data does the system hold, and how
+does it flow and transform?}
+
+\textbf{Modelling conventions:} Entity–relationship overview of \texttt{BookingRecord},
+\texttt{Itinerary}, \texttt{DisruptionEvent}, \texttt{User}, and \texttt{ConsentState}; data-flow
+arrows annotated with privacy rules (e.g., city-level only until consent $=$ \textit{precise}).
+
+\subsection{Viewpoint 3: Deployment Viewpoint}
+
+\textbf{Addresses concerns of:} System Administrator, Development Team.
+
+\textbf{Purpose:} Describes the runtime topology — how system components are assigned to execution
+environments and how they communicate across network boundaries. Answers: \textit{where does the
+system run and how are processes connected?}
+
+\textbf{Modelling conventions:} UML deployment diagram showing nodes (client browser, API Gateway,
+backend service processes, databases, message broker) and communication paths with protocol
+annotations.
+
+\subsection{Viewpoint 4: Security Viewpoint}
+
+\textbf{Addresses concerns of:} Privacy Regulator, Traveller, System Administrator.
+
+\textbf{Purpose:} Describes how authentication, authorisation, data-in-transit protection, and
+location-disclosure control are enforced across the system. Answers: \textit{how does the system
+protect user identity and sensitive data?}
+
+\textbf{Modelling conventions:} UML sequence diagram of the JWT authentication flow; state diagram
+of the consent state machine (\textit{none} $\to$ \textit{city-level} $\to$ \textit{precise});
+annotations of TLS termination points.
+
+% ================================================================
+\section{Views}
+% ================================================================
+
+Each view below instantiates its corresponding viewpoint for the WanderSync system. Where a
+diagram is specified, the PlantUML source is maintained in the \texttt{diagrams/} directory of
+this deliverable and must be rendered to PNG before final submission.
+
+\subsection{View 1: Functional View — Subsystem Component Diagram}
+
+WanderSync is decomposed into six top-level subsystems connected through explicit interfaces:
+
+\begin{enumerate}[noitemsep]
+  \item \textbf{API Gateway \& Frontend Layer} — single external entry point; TLS termination;
+        JWT validation middleware; React SPA delivery.
+  \item \textbf{Authentication \& User Management Service} — registration, login, JWT issuance,
+        profile CRUD.
+  \item \textbf{Booking Aggregation Service} — \texttt{BookingAdapter} per provider; normalises
+        heterogeneous provider data to \texttt{BookingRecord}.
+  \item \textbf{Itinerary Management Service} — authoritative itinerary store; timeline assembly;
+        caching; consumes \texttt{DisruptionEvent} messages.
+  \item \textbf{Disruption Detection Service} — monitors external feeds; publishes
+        \texttt{DisruptionEvent} to message broker.
+  \item \textbf{Social Synchronisation Service} — geospatial matching; bilateral consent state
+        machine; enforces privacy-preserving disclosure rules.
+\end{enumerate}
+
+The Disruption Detection Service and Itinerary/Notification services communicate exclusively
+through the message broker, realising the event-driven decoupling documented in ADR-001.
+
+\subsection{View 2: Information View — Data Entities and Privacy Rules}
+
+The core data entities and their disclosure constraints are:
+
+\begin{tabularx}{\textwidth}{L{3.5cm}L{4cm}X}
+\toprule
+\textbf{Entity} & \textbf{Owner} & \textbf{Privacy / Lifecycle Rule} \\
+\midrule
+\texttt{User} & Auth Service & Passwords stored as bcrypt hash; never exposed raw. \\
+\texttt{BookingRecord} & Booking Aggregation & Normalised from provider data; visible only to
+  owning user. \\
+\texttt{Itinerary} & Itinerary Service & Assembled from BookingRecords; cached; updated on
+  DisruptionEvent. \\
+\texttt{DisruptionEvent} & Disruption Service & Published to broker; consumed by Itinerary and
+  Notification services; not persisted long-term. \\
+\texttt{ConsentState} & Social Service & Values: \textit{none}, \textit{city-level},
+  \textit{precise}; transitions require explicit bilateral action; governs location resolution
+  returned by the Social Service. \\
+\texttt{LocationData} & Social Service & Raw coordinates never persisted beyond session unless
+  user explicitly saves; only city-level label exposed when ConsentState $\neq$ \textit{precise}. \\
+\bottomrule
+\end{tabularx}
+
+\subsection{View 3: Deployment View — Runtime Topology}
+
+The runtime topology comprises the following nodes and communication paths:
+
+\begin{itemize}[noitemsep]
+  \item \textbf{Client Browser} — communicates with API Gateway over HTTPS (port 443).
+  \item \textbf{API Gateway} — proxies to Auth, Itinerary, Disruption, and Social services over
+        internal HTTP; enforces JWT before forwarding.
+  \item \textbf{Backend Services} — Auth, Booking Aggregation, Itinerary Management, Disruption
+        Detection, Social Synchronisation — each runs as an independent process.
+  \item \textbf{Message Broker} — Disruption Detection publishes; Itinerary and Notification
+        services subscribe.
+  \item \textbf{Databases} — User DB (Auth Service); Itinerary DB (Itinerary Service); Social DB
+        (Social Service). Each service owns its own store.
+  \item \textbf{External APIs} — Flight tracking and weather services polled or subscribed to by
+        the Disruption Detection Service over HTTPS.
+\end{itemize}
+
+\subsection{View 4: Security View — Authentication and Consent}
+
+\textbf{JWT Authentication Flow:}
+\begin{enumerate}[noitemsep]
+  \item Client submits credentials to API Gateway $\to$ forwarded to Auth Service.
+  \item Auth Service verifies bcrypt hash; issues signed JWT (HS256, 24-hour expiry).
+  \item JWT returned to client; stored in memory (not localStorage).
+  \item All subsequent requests carry JWT in \texttt{Authorization: Bearer} header.
+  \item API Gateway validates JWT signature and expiry before proxying; rejects with 401 on
+        failure.
+\end{enumerate}
+
+\textbf{Location Consent State Machine:}
+\begin{itemize}[noitemsep]
+  \item Initial state: \textit{none} — only city-level label returned; no coordinates.
+  \item User A sends opt-in request $\to$ state transitions to \textit{pending} on A's side.
+  \item User B accepts $\to$ bilateral consent established; state becomes \textit{precise} for
+        both.
+  \item Either user revokes $\to$ state resets to \textit{none}; precise coordinates withheld
+        immediately.
+  \item Enforcement is applied at the data-access layer of the Social Service, not the UI.
+\end{itemize}
+
+\end{document}
