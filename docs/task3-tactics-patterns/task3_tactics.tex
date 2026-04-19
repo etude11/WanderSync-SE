@@ -1,0 +1,166 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{parskip}
+\usepackage{titlesec}
+\usepackage{xcolor}
+
+\definecolor{accent}{RGB}{30,80,160}
+
+\hypersetup{colorlinks=true, linkcolor=accent, urlcolor=accent}
+
+\titleformat{\section}{\large\bfseries\color{accent}}{}{0em}{}[\titlerule]
+\titleformat{\subsection}{\normalsize\bfseries\color{accent}}{}{0em}{}
+
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{\textbf{WanderSync} \textit{Task 3: Architectural Tactics}}
+\rhead{Team 15}
+\rfoot{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\begin{document}
+
+\begin{center}
+  {\LARGE\bfseries Task 3: Architectural Tactics}\\[0.4em]
+  {\large WanderSync: Dynamic Itinerary, Disruption Management and Social Travel Hub}\\[0.2em]
+  {\normalsize Team 15}
+\end{center}
+
+\vspace{1em}
+
+% ================================================================
+\section{Overview}
+% ================================================================
+
+Architectural tactics are design decisions that directly influence the system's response to a
+quality-attribute stimulus. Each tactic below is selected to address a specific non-functional
+requirement (NFR) documented in Task 1. The five tactics collectively span the performance,
+reliability, security, and privacy quality attributes of WanderSync.
+
+% ================================================================
+\section{Architectural Tactics}
+% ================================================================
+
+% ----------------------------------------------------------------
+\subsection{Tactic 1: Caching}
+% ----------------------------------------------------------------
+
+\textbf{NFR addressed:} NFR1 -- Performance (itinerary page loads in under 3 seconds; external
+API calls complete within 5 seconds).
+
+\textbf{Mechanism in WanderSync:}
+The Itinerary Management Service caches fully-assembled itinerary objects in Redis, keyed by
+itinerary identifier. On an inbound timeline request the service performs a cache lookup first;
+only on a cache miss does it re-query the database and re-aggregate provider data. A separate
+short-lived cache layer (60-second TTL) in the Booking Aggregation Service stores raw provider
+responses, absorbing burst traffic without redundant external API calls.
+
+The tactic directly satisfies the 3-second render requirement by eliminating database and
+provider round-trips on the hot path. Cache entries are invalidated on itinerary mutation (booking
+added, disruption applied) to maintain consistency.
+
+\textbf{Trade-off:} Cached data may be transiently stale after a disruption event fires before
+invalidation completes. This is accepted because the EDA pipeline delivers \texttt{DisruptionEvent}
+messages to the Itinerary Service within 10 seconds, triggering cache invalidation promptly.
+
+% ----------------------------------------------------------------
+\subsection{Tactic 2: Retry with Circuit Breaker}
+% ----------------------------------------------------------------
+
+\textbf{NFR addressed:} NFR1 -- Performance (external API calls under 5 seconds) and NFR2 --
+Reliability (graceful error handling; no crash on external API failure; disruption notification
+within 10 seconds).
+
+\textbf{Mechanism in WanderSync:}
+Every call from the Booking Aggregation Service to an external provider adapter is wrapped in a
+\texttt{CircuitBreakerProxy}. On a transient failure the proxy retries up to two times with
+exponential backoff (500\,ms, 1\,s). If the failure threshold is exceeded (three consecutive
+failures within a 30-second window), the circuit opens and the aggregation layer falls back to
+cached data or marks that provider as temporarily unavailable, returning a partial response with
+a user-visible status indicator instead of propagating an exception.
+
+The Disruption Detection Service applies the same retry policy when polling external
+flight-tracking feeds, ensuring that transient API unavailability does not silently drop detection
+events and degrade accuracy below the 17/20 threshold.
+
+\textbf{Trade-off:} The maximum retry window (up to 3 seconds with backoff) is bounded well within
+the 5-second API latency NFR. Open-circuit fallback means a subset of provider data may be absent
+from the itinerary view during an outage, which is communicated to the user rather than surfaced
+as an error.
+
+% ----------------------------------------------------------------
+\subsection{Tactic 3: Authenticate and Authorise at the Gateway}
+% ----------------------------------------------------------------
+
+\textbf{NFR addressed:} NFR3 -- Security (100\% of protected endpoints require a valid JWT with
+24-hour expiry; all traffic over HTTPS; no sensitive data over plain HTTP).
+
+\textbf{Mechanism in WanderSync:}
+The API Gateway intercepts every inbound request and validates the JWT signature and expiry
+before forwarding to any downstream service. TLS is terminated at the gateway; backend services
+communicate over an internal network without additional TLS overhead. No downstream service
+accepts client requests directly -- they receive only internally forwarded requests from the
+gateway, which appends a decoded identity header after token validation.
+
+Role-based authorisation (traveller, admin) is also enforced at the gateway, preventing
+downstream services from duplicating auth logic and ensuring consistent policy enforcement. A
+single middleware update at the gateway propagates to all services simultaneously.
+
+\textbf{Trade-off:} The gateway becomes a single enforcement point, which means a gateway
+misconfiguration could expose all services. This risk is mitigated by keeping the auth middleware
+minimal and independently testable.
+
+% ----------------------------------------------------------------
+\subsection{Tactic 4: Event Queue with Persistence}
+% ----------------------------------------------------------------
+
+\textbf{NFR addressed:} NFR2 -- Reliability (disruption notification within 10 seconds of event
+arrival; at least 85\% detection accuracy across 20 simulated test cases).
+
+\textbf{Mechanism in WanderSync:}
+The Disruption Detection Service publishes \texttt{DisruptionEvent} messages to a Redis Streams
+channel rather than a fire-and-forget Pub/Sub topic. Redis Streams persists messages to an
+append-only log with consumer group semantics: if the Itinerary Management or Notification
+consumer is briefly unavailable, it replays missed events upon reconnection without loss.
+
+The persisted event stream also serves as the ground truth for accuracy measurement: the 20
+simulated test cases can be replayed against the log to count correctly identified and notified
+disruptions deterministically.
+
+\textbf{Trade-off:} Redis Streams introduces slightly more operational complexity than plain
+Pub/Sub (consumer group management, stream trimming). This is accepted because persistence is
+non-negotiable for the 85\% accuracy NFR and the 10-second delivery window under consumer
+restart scenarios.
+
+% ----------------------------------------------------------------
+\subsection{Tactic 5: Geospatial Masking}
+% ----------------------------------------------------------------
+
+\textbf{NFR addressed:} NFR4 -- Privacy (zero instances of precise location leakage before
+bilateral opt-in; city-level region label only before consent; location data not persisted beyond
+the active session unless explicitly saved).
+
+\textbf{Mechanism in WanderSync:}
+The Social Synchronisation Service applies a \texttt{LocationMaskingFilter} to every outbound
+social query response before serialisation. The filter consults the consent registry for the pair
+of users involved in the query. If bilateral consent is absent, the filter truncates precise
+coordinates to the city centroid (bounding-box snap to nearest city-level geohash). Raw
+coordinates never leave the service boundary without a confirmed bilateral opt-in record.
+
+Session-scoped location data is stored exclusively in memory and purged at session termination
+unless the user explicitly invokes the save action, preventing residual location leakage in
+persistent storage.
+
+\textbf{Trade-off:} City-level masking reduces the spatial resolution of matching results for
+non-consented users, potentially surfacing false positives (users in the same city but not truly
+nearby). This is an intentional privacy-utility trade-off: precision is gated behind explicit
+consent.
+
+\end{document}
