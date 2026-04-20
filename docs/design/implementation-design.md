@@ -283,14 +283,9 @@ WanderSync-SE/
 │       │   ├── notification.module.ts
 │       │   ├── notification.controller.ts
 │       │   └── notification.service.ts      # XREADGROUP consumer on disruption-events; writes NotificationLog
-│       └── social/                          # Subsystem 6: Social Synchronisation
+│       └── social/                          # Subsystem 6: STUBBED — returns 501 Not Implemented
 │           ├── social.module.ts
-│           ├── social.controller.ts
-│           ├── social.service.ts            # Geospatial matching, consent state machine
-│           ├── location-masking.service.ts  # Tactic 5: truncates coords to city centroid when consent ≠ PRECISE
-│           └── dto/
-│               ├── consent.dto.ts
-│               └── social-match.dto.ts
+│           └── social.controller.ts         # All routes return 501; no service logic
 ├── prisma/
 │   └── schema.prisma
 ├── test/
@@ -393,7 +388,94 @@ These are consumed by `disruption/adapters/`, not `booking/strategies/`. They do
 
 ---
 
-## 8. Environment Variables
+## 8. Prototype Scope
+
+### Core — Implemented
+
+The app's stated goal is: aggregate bookings into a unified timeline and proactively detect and
+notify disruptions. All subsystems that serve this goal are implemented in full.
+
+| Subsystem | Status | Owner |
+|---|---|---|
+| 1 — CoR Gateway (`common/`) | **Implemented** | etude11 |
+| 2 — Auth (`auth/`) | **Implemented** | etude11 |
+| 3 — Booking Aggregation (`booking/`) | **Implemented** | manasimundada |
+| 4 — Itinerary Management (`itinerary/`) | **Implemented** | manasimundada |
+| 5 — Disruption Detection (`disruption/`) | **Implemented** | udaybindal01 |
+| 7 — Notification (`notification/`) | **Implemented** | Fane1824 |
+
+### Non-Core — Stubbed
+
+**Social Travel Synchronisation (FR5, Subsystem 6)** is deferred. The project proposal describes
+it as "a lightweight social component"; the app fully delivers its core value without it. The
+consent state machine and geospatial masking add significant implementation complexity with no
+impact on the graded disruption and booking NFRs.
+
+`social/` routes return `{ statusCode: 501, message: "Not implemented" }`. The `ConsentState`
+model remains in `schema.prisma` for DB consistency; no service logic runs behind it.
+
+### Stubbed Within Core Modules
+
+| Component | Stub behaviour |
+|---|---|
+| `HotelBookingStrategy` | `fetchAndNormalize()` returns `[]` |
+| `TransportBookingStrategy` | `fetchAndNormalize()` returns `[]` |
+| Email notification channel | `NotificationService` writes `NotificationLog` only; no email sent |
+
+---
+
+## 9. End-to-End Flow (Task 4 Deliverable)
+
+The single demonstrable user journey that exercises all implemented subsystems:
+
+```
+Step 1  POST /auth/register  +  POST /auth/login
+        JWT issued — CoR chain: RateLimit → Auth → Schema → AuditLog
+
+Step 2  POST /itineraries
+        POST /itineraries/:id/bookings  { providerRef: "AI101", type: "FLIGHT", ... }
+
+Step 3  GET  /bookings/aggregate?itineraryId=X
+        AviationstackFlightStrategy.fetchAndNormalize() called (AviationStack REST)
+        BookingRecord upserted to DB
+        Redis key  booking-agg:{userId}:aviationstack  written (60s TTL)
+
+Step 4  GET  /itineraries/:id
+        Cache miss → Prisma query sorted by departureTime
+        Result cached at  itinerary:{id}  (5-min TTL)
+        Repeat GET → cache hit (verifiable via Redis CLI)
+
+Step 5  [Background — @Cron every 60s]
+        DisruptionService polls FlightTrackerAdapter (AviationStack) for each active providerRef
+        Detects: delay > 30min  OR  status ∈ {cancelled, incident, diverted}
+        DisruptionPublisherService.XADD("disruption-events", payload)
+        DisruptionEvent row persisted to DB
+
+Step 6  [Background — XREADGROUP consumer]
+        NotificationService reads "disruption-events", consumer group "notification"
+        Looks up affected userId via BookingRecord.providerRef
+        Writes NotificationLog { userId, eventId, channel: "in-app", success: true }
+
+Step 7  GET  /disruptions/mine
+        Returns DisruptionEvent[] matching current user's BookingRecord providerRefs
+
+Step 8  GET  /notifications
+        Returns NotificationLog[] for current user, newest first
+```
+
+**Patterns exercised:** CoR (Step 1), Strategy (Step 3), Tactic 1 Redis cache (Step 4),
+Tactic 4 Redis Streams (Steps 5–6), Tactic 2 circuit breaker (Steps 3+5).
+
+### NFR2 Test Harness — POST /disruptions/simulate
+
+NFR2 requires 85% accuracy across 20 simulated disruption test cases. `POST /disruptions/simulate`
+[ADMIN only] injects a `DisruptionEvent` payload directly into the Redis Streams channel,
+bypassing the cron poller. The Notification consumer processes it identically to a live event.
+All 20 test cases are run deterministically without needing real flight disruptions.
+
+---
+
+## 10. Environment Variables
 
 ```env
 # Server
