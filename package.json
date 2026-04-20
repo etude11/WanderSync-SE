@@ -1,13 +1,17 @@
 {
   "name": "wandersync-se",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "directories": {
-    "doc": "docs"
-  },
+  "description": "WanderSync Software Engineering Prototype",
+  "main": "dist/main.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "nest build",
+    "start": "nest start",
+    "start:dev": "nest start --watch",
+    "start:prod": "node dist/main.js",
+    "test": "jest --config jest.config.cjs",
+    "test:watch": "jest --config jest.config.cjs --watch",
+    "test:cov": "jest --config jest.config.cjs --coverage",
+    "lint": "tsc --noEmit"
   },
   "repository": {
     "type": "git",
@@ -47,8 +51,10 @@
     "@nestjs/cli": "^11.0.21",
     "@nestjs/testing": "^11.1.19",
     "@types/bcrypt": "^6.0.0",
+    "@types/express": "^5.0.3",
     "@types/jest": "^30.0.0",
     "@types/node": "^25.6.0",
+    "@types/passport-jwt": "^4.0.1",
     "@types/supertest": "^7.2.0",
     "jest": "^30.3.0",
     "prisma": "^6.16.0",
