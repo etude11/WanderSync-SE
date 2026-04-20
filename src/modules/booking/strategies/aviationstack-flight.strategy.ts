@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { BookingType } from '@prisma/client';
 import axios from 'axios';
@@ -16,6 +16,7 @@ export class AviationstackFlightStrategy implements IBookingStrategy {
   readonly providerKey = 'aviationstack';
   readonly bookingType = BookingType.FLIGHT;
 
+  private readonly logger = new Logger(AviationstackFlightStrategy.name);
   private readonly apiKey: string;
   private static readonly BASE = 'http://api.aviationstack.com/v1/flights';
 
@@ -30,6 +31,9 @@ export class AviationstackFlightStrategy implements IBookingStrategy {
     if (refs.length === 0) return [];
 
     const results = await Promise.allSettled(refs.map((iata) => this.fetchOne(iata)));
+    results
+      .filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+      .forEach((r) => this.logger.warn(`AviationStack fetch failed: ${String(r.reason)}`));
     return results
       .filter((r): r is PromiseFulfilledResult<NormalizedBooking | null> => r.status === 'fulfilled')
       .map((r) => r.value)
@@ -39,7 +43,7 @@ export class AviationstackFlightStrategy implements IBookingStrategy {
   private async fetchOne(iata: string): Promise<NormalizedBooking | null> {
     const { data } = await axios.get<{ data: AviationStackFlight[] }>(
       AviationstackFlightStrategy.BASE,
-      { params: { access_key: this.apiKey, flight_iata: iata } },
+      { params: { access_key: this.apiKey, flight_iata: iata }, timeout: 5000 },
     );
 
     const flight = data.data?.[0];
