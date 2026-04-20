@@ -1,0 +1,115 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Enums ────────────────────────────────────────────────────────────────────
+
+enum Role {
+  TRAVELLER
+  ADMIN
+}
+
+enum BookingType {
+  FLIGHT
+  HOTEL
+  TRANSPORT
+}
+
+enum DisruptionType {
+  FLIGHT_DELAY
+  FLIGHT_CANCELLATION
+  WEATHER_ALERT
+  FLIGHT_DIVERSION
+}
+
+enum ConsentLevel {
+  NONE
+  PENDING
+  CITY_LEVEL
+  PRECISE
+}
+
+// ── Models ───────────────────────────────────────────────────────────────────
+
+model User {
+  id                String            @id @default(uuid())
+  email             String            @unique
+  passwordHash      String
+  displayName       String
+  role              Role              @default(TRAVELLER)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  itineraries       Itinerary[]
+  consentsInitiated ConsentState[]    @relation("UserA")
+  consentsReceived  ConsentState[]    @relation("UserB")
+  notifications     NotificationLog[]
+}
+
+model Itinerary {
+  id        String          @id @default(uuid())
+  userId    String
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  bookings  BookingRecord[]
+}
+
+model BookingRecord {
+  id            String      @id @default(uuid())
+  itineraryId   String
+  itinerary     Itinerary   @relation(fields: [itineraryId], references: [id], onDelete: Cascade)
+  provider      String
+  providerRef   String
+  type          BookingType
+  departureTime DateTime
+  arrivalTime   DateTime
+  origin        String
+  destination   String
+  disrupted     Boolean     @default(false)
+  rawData       Json
+  createdAt     DateTime    @default(now())
+
+  @@index([itineraryId, departureTime])
+  @@index([providerRef])
+}
+
+model DisruptionEvent {
+  id             String         @id @default(uuid())
+  type           DisruptionType
+  severity       Int
+  description    String
+  flightIata     String?
+  affectedOrigin String?
+  publishedAt    DateTime       @default(now())
+}
+
+model ConsentState {
+  id        String       @id @default(uuid())
+  userAId   String
+  userBId   String
+  userA     User         @relation("UserA", fields: [userAId], references: [id])
+  userB     User         @relation("UserB", fields: [userBId], references: [id])
+  state     ConsentLevel @default(NONE)
+  updatedAt DateTime     @updatedAt
+
+  @@unique([userAId, userBId])
+}
+
+model NotificationLog {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  eventId     String
+  channel     String
+  deliveredAt DateTime @default(now())
+  success     Boolean
+  read        Boolean  @default(false)
+
+  @@index([userId, deliveredAt])
+}
