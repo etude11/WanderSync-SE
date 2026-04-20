@@ -1,0 +1,68 @@
+@startuml task3_strategy
+skinparam classAttributeIconSize 0
+skinparam classFontStyle bold
+skinparam backgroundColor white
+skinparam class {
+  BorderColor #1E50A0
+  HeaderBackgroundColor #E8EEF8
+  ArrowColor #1E50A0
+}
+
+interface IBookingStrategy {
+  +fetchAndNormalize(userId: String): List<BookingRecord>
+}
+
+class BookingRecord {
+  -bookingId: String
+  -provider: String
+  -type: BookingType
+  -departureTime: Instant
+  -arrivalTime: Instant
+  +getBookingId(): String
+  +getProvider(): String
+  +getType(): BookingType
+}
+
+class FlightBookingStrategy {
+  -apiClient: FlightApiClient
+  +fetchAndNormalize(userId: String): List<BookingRecord>
+}
+
+class HotelBookingStrategy {
+  -apiClient: HotelApiClient
+  +fetchAndNormalize(userId: String): List<BookingRecord>
+}
+
+class TransportBookingStrategy {
+  -apiClient: TransportApiClient
+  +fetchAndNormalize(userId: String): List<BookingRecord>
+}
+
+class ProviderRegistry {
+  -strategies: Map<String, IBookingStrategy>
+  +register(key: String, strategy: IBookingStrategy): void
+  +get(key: String): IBookingStrategy
+  +getAll(): Collection<IBookingStrategy>
+}
+
+class BookingAggregationService {
+  -registry: ProviderRegistry
+  +aggregateAllBookings(userId: String): List<BookingRecord>
+}
+
+FlightBookingStrategy     ..|> IBookingStrategy
+HotelBookingStrategy      ..|> IBookingStrategy
+TransportBookingStrategy  ..|> IBookingStrategy
+
+ProviderRegistry          o--> "1..*" IBookingStrategy : strategies
+BookingAggregationService --> ProviderRegistry            : uses
+IBookingStrategy          ..>  BookingRecord              : produces
+
+note right of BookingAggregationService
+  aggregateAllBookings() calls registry.getAll(),
+  invokes fetchAndNormalize() on each strategy,
+  and merges results into one sorted list.
+  New provider = 1 new class + 1 registry entry;
+  zero changes to BookingAggregationService.
+end note
+@enduml

@@ -107,15 +107,26 @@ The API Gateway intercepts every inbound request and validates the JWT signature
 before forwarding to any downstream service. TLS is terminated at the gateway; backend services
 communicate over an internal network without additional TLS overhead. No downstream service
 accepts client requests directly -- they receive only internally forwarded requests from the
-gateway, which appends a decoded identity header after token validation.
+gateway, which appends a decoded identity header (\texttt{X-User-Id}, \texttt{X-User-Role})
+after token validation.
 
-Role-based authorisation (traveller, admin) is also enforced at the gateway, preventing
-downstream services from duplicating auth logic and ensuring consistent policy enforcement. A
-single middleware update at the gateway propagates to all services simultaneously.
+The gateway enforces \textbf{authentication (AuthN)} and \textbf{coarse-grained role-based
+authorisation (AuthZ)} — for example, confirming that the caller holds the \texttt{TRAVELLER}
+or \texttt{ADMIN} role before allowing access to a protected route. This prevents unauthenticated
+access and coarse role violations in one central location.
 
-\textbf{Trade-off:} The gateway becomes a single enforcement point, which means a gateway
-misconfiguration could expose all services. This risk is mitigated by keeping the auth middleware
-minimal and independently testable.
+\textbf{Fine-grained resource authorisation} — such as verifying that the authenticated user
+actually owns the itinerary they are attempting to edit — \textbf{must remain in the domain
+services}. The API Gateway has no access to the Itinerary or Social databases; it cannot
+determine whether User A owns Itinerary B. Delegating resource ownership checks entirely to
+the gateway would introduce an Insecure Direct Object Reference (IDOR) vulnerability.
+Downstream services verify resource ownership using the forwarded identity header before
+executing any mutating operation.
+
+\textbf{Trade-off:} The gateway becomes a single enforcement point for AuthN and coarse AuthZ,
+which means a gateway misconfiguration could expose all services. This risk is mitigated by
+keeping the auth middleware minimal and independently testable. The ownership-check responsibility
+in domain services is explicit and tested at the integration level.
 
 % ----------------------------------------------------------------
 \subsection{Tactic 4: Event Queue with Persistence}

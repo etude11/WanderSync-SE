@@ -218,7 +218,7 @@ Response Measure  & Changes confined to \textbf{at most 2 files} outside the ded
 \section{Subsystem Overview}
 % ================================================================
 
-WanderSync is decomposed into six subsystems. Each subsystem owns a well-defined responsibility
+WanderSync is decomposed into seven subsystems. Each subsystem owns a well-defined responsibility
 boundary and communicates with others through explicit interfaces or a message broker.
 
 \subsection{Subsystem 1:API Gateway and Frontend Layer}
@@ -303,6 +303,52 @@ the bilateral consent state machine, and enforces privacy-preserving location di
   \item Returns only city-level labels to users whose consent state is \textit{none}.
   \item Purges raw location data at session end unless the user explicitly saves it.
 \end{itemize}
+
+\subsection{Subsystem 7:Notification Service}
+
+\textbf{Role:} Dedicated consumer of \texttt{DisruptionEvent} messages from the message broker.
+Delivers user-facing alerts (in-app notifications and email) to affected travellers. Decouples
+the notification delivery mechanism from disruption detection and itinerary management logic,
+so that new notification channels can be added without modifying either upstream service.
+
+\textbf{Responsibilities:}
+\begin{itemize}[noitemsep]
+  \item Subscribing to the Redis Streams channel for \texttt{DisruptionEvent} messages as a
+        dedicated consumer group.
+  \item Resolving each affected user's notification preferences (in-app, email, or both) via
+        the User profile store.
+  \item Delivering alerts within the 10-second delivery window mandated by NFR2.
+  \item Maintaining a notification delivery log for auditability and replay on missed deliveries.
+\end{itemize}
+
+% ================================================================
+\section{Non-Functional Requirement 6}
+% ================================================================
+
+\subsection{NFR6:Usability: Session Continuity}
+
+\begin{tabularx}{\textwidth}{L{3.5cm}X}
+\toprule
+\textbf{Scenario Element} & \textbf{Description} \\
+\midrule
+Source            & Authenticated traveller \\
+Stimulus          & Accesses the application during a multi-leg journey whose total duration
+                    exceeds 24 hours \\
+Artifact          & Authentication Service and client-side session management \\
+Environment       & Runtime; user mid-journey on intermittent or low-bandwidth connectivity
+                    (e.g., airport Wi-Fi) \\
+Response          & The 24-hour JWT expires; the application prompts re-authentication; the
+                    user cannot view disruption notifications until they log in again \\
+Response Measure  & Forced re-login occurs no more than once per 24-hour window; a
+                    refresh-token or sliding-expiry mechanism is deferred to post-prototype
+                    scope and explicitly documented as a known usability debt \\
+\bottomrule
+\end{tabularx}
+
+\textbf{Architectural significance:} The stateless JWT decision (ADR-004) introduces a negative
+usability trade-off for extended journeys. Mitigating this requires a refresh-token mechanism or
+server-side sliding expiry, both of which re-introduce shared state and are deferred for the
+prototype.
 
 \end{document}
 

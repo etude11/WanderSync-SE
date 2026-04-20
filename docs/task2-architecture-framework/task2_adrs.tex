@@ -118,11 +118,7 @@ compiling the final PDF, then uncomment the figure below.
 
 \begin{figure}[H]
   \centering
-  % \includegraphics[width=0.85\textwidth]{diagrams/adr001_event_driven.png}
-  \fbox{\parbox{0.85\textwidth}{\centering\vspace{1em}
-    \textit{Figure placeholder: generate \texttt{adr001\_event\_driven.png} from PlantUML source
-    in \texttt{diagrams/adr001\_event\_driven.puml}}
-  \vspace{1em}}}
+  \includegraphics[width=0.85\textwidth]{diagrams/adr001_event_driven.png}
   \caption{ADR-001 — Event-Driven Disruption Detection Pipeline}
 \end{figure}
 
@@ -177,11 +173,7 @@ compiling the final PDF, then uncomment the figure below.
 
 \begin{figure}[H]
   \centering
-  % \includegraphics[width=0.85\textwidth]{diagrams/adr002_api_gateway.png}
-  \fbox{\parbox{0.85\textwidth}{\centering\vspace{1em}
-    \textit{Figure placeholder: generate \texttt{adr002\_api\_gateway.png} from PlantUML source
-    in \texttt{diagrams/adr002\_api\_gateway.puml}}
-  \vspace{1em}}}
+  \includegraphics[width=0.85\textwidth]{diagrams/adr002_api_gateway.png}
   \caption{ADR-002 — API Gateway Deployment Topology}
 \end{figure}
 
@@ -240,11 +232,7 @@ compiling the final PDF, then uncomment the figure below.
 
 \begin{figure}[H]
   \centering
-  % \includegraphics[width=0.85\textwidth]{diagrams/adr003_adapter.png}
-  \fbox{\parbox{0.85\textwidth}{\centering\vspace{1em}
-    \textit{Figure placeholder: generate \texttt{adr003\_adapter.png} from PlantUML source
-    in \texttt{diagrams/adr003\_adapter.puml}}
-  \vspace{1em}}}
+  \includegraphics[width=0.85\textwidth]{diagrams/adr003_adapter.png}
   \caption{ADR-003 — BookingAdapter Class Structure}
 \end{figure}
 
@@ -291,6 +279,12 @@ compiling the final PDF, then uncomment the figure below.
     \item \textit{Negative:} Token revocation before expiry is not supported without a blocklist
           (denylist), which re-introduces state. Accepted as out-of-scope for the prototype;
           24-hour expiry limits the exposure window.
+    \item \textit{Negative (Usability — NFR6):} A traveller on a multi-leg journey exceeding
+          24 hours will have their session silently expire mid-trip. When the JWT expires, the
+          user is prompted to re-authenticate — potentially on unreliable airport Wi-Fi — and will
+          be unable to receive disruption notifications until they log in again. A refresh-token
+          mechanism or sliding-expiry policy would mitigate this but is deferred to
+          post-prototype scope.
     \item \textit{Negative:} Token payload is readable (Base64-encoded); sensitive data must not
           be embedded in claims. Only non-sensitive identifiers (userId, role) are included.
   \end{itemize}
@@ -303,11 +297,7 @@ from \texttt{diagrams/adr004\_jwt\_auth.puml}.
 
 \begin{figure}[H]
   \centering
-  % \includegraphics[width=0.85\textwidth]{diagrams/adr004_jwt_auth.png}
-  \fbox{\parbox{0.85\textwidth}{\centering\vspace{1em}
-    \textit{Figure placeholder: generate \texttt{adr004\_jwt\_auth.png} from PlantUML source
-    in \texttt{diagrams/adr004\_jwt\_auth.puml}}
-  \vspace{1em}}}
+  \includegraphics[width=0.85\textwidth]{diagrams/adr004_jwt_auth.png}
   \caption{ADR-004 — JWT Authentication Sequence}
 \end{figure}
 

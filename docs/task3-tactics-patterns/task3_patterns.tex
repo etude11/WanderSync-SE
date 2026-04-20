@@ -54,56 +54,76 @@ the specific problem it solves within the system, the classes and modules involv
 diagrams showing the structure and runtime behaviour.
 
 % ================================================================
-\section{Pattern 1: Observer}
+\section{Pattern 1: Strategy}
 % ================================================================
 
 \begin{mdframed}[backgroundcolor=patternbox, linecolor=accent, linewidth=0.8pt]
 \patternfield{Category}{Behavioral}
-\patternfield{NFRs addressed}{NFR2 (Reliability -- disruption notification within 10 s); NFR5 (Modifiability -- adding a new reaction type requires no changes to the detection service)}
+\patternfield{NFRs addressed}{NFR5 (Modifiability -- adding a new travel provider requires changes to at most 2 files outside the adapter module); NFR1 (Performance -- strategies are independently cacheable and testable with mock clients)}
 \end{mdframed}
 
 \vspace{0.5em}
 
 \subsubsection{Problem}
 
-When the Disruption Detection Service identifies a flight delay or cancellation, multiple
-independent subsystems must react: the Notification Service must alert the user, the Itinerary
-Management Service must flag affected segments, and the Social Synchronisation Service may need
-to notify a travel companion. Without a formal decoupling mechanism, the Disruption Detection
-Service would hold direct references to all three consumers, creating tight coupling. Every new
-reaction type (e.g., a future re-booking suggestion engine) would require modifying the detection
-service itself, violating the Modifiability NFR and GRASP Low Coupling.
+The Booking Aggregation Service must retrieve and normalise data from multiple heterogeneous
+travel providers — airlines, hotel platforms, and local transport services — each with a
+distinct API and response schema. Without a formal pattern, provider-specific parsing logic
+would proliferate inside the core aggregation service, coupling it to every provider's
+implementation details. Every new provider addition would require modifying the
+\texttt{BookingAggregationService} itself, violating the Modifiability NFR (NFR5) and GRASP
+High Cohesion. Furthermore, individual provider interactions cannot be tested in isolation
+because the fetch logic is entangled with the aggregation logic.
 
 \subsubsection{Solution and Class Mapping}
 
-The Observer (Publish-Subscribe) pattern decouples the event source from its consumers.
+The Strategy pattern defines a family of interchangeable algorithms (one per booking provider),
+encapsulates each behind a shared interface, and allows the context (\texttt{BookingAggregationService})
+to select and invoke the appropriate strategy at runtime without knowing the concrete type.
 
 \begin{itemize}[noitemsep]
-  \item \textbf{\texttt{DisruptionEvent}} -- data object carrying \texttt{flightId},
-        \texttt{DisruptionType}, and \texttt{Instant} timestamp.
-  \item \textbf{\texttt{IDisruptionObserver}} -- interface declaring
-        \texttt{onDisruption(event: DisruptionEvent)}. All consumers implement this interface.
-  \item \textbf{\texttt{DisruptionEventPublisher}} -- subject; holds a list of registered
-        \texttt{IDisruptionObserver} instances; calls \texttt{notifyObservers(event)} after
-        persisting the event to the Redis Stream (Tactic 4).
-  \item \textbf{\texttt{NotificationObserver}} -- sends an in-app or email notification to
-        the affected user.
-  \item \textbf{\texttt{ItineraryFlagObserver}} -- marks the affected \texttt{BookingRecord}
-        segments as disrupted and invalidates the itinerary cache entry.
-  \item \textbf{\texttt{SocialAlertObserver}} -- queries the consent registry and notifies
-        matched travel companions who have bilateral opt-in with the affected user.
+  \item \textbf{\texttt{IBookingStrategy}} -- interface declaring
+        \texttt{fetchAndNormalize(userId: String): List<BookingRecord>}. All provider
+        strategies implement this contract.
+  \item \textbf{\texttt{BookingRecord}} -- canonical data object produced by every strategy;
+        carries \texttt{bookingId}, \texttt{provider}, \texttt{BookingType},
+        \texttt{departureTime}, and \texttt{arrivalTime}.
+  \item \textbf{\texttt{FlightBookingStrategy}} -- encapsulates all flight-API calls and maps
+        the airline-specific response schema to \texttt{BookingRecord}.
+  \item \textbf{\texttt{HotelBookingStrategy}} -- encapsulates hotel-platform API calls and
+        schema mapping.
+  \item \textbf{\texttt{TransportBookingStrategy}} -- encapsulates local-transport API calls
+        and schema mapping.
+  \item \textbf{\texttt{ProviderRegistry}} -- maps provider-key strings (e.g.,
+        \texttt{"flight"}, \texttt{"hotel"}) to \texttt{IBookingStrategy} instances;
+        populated at application startup.
+  \item \textbf{\texttt{BookingAggregationService}} -- context class; iterates all registered
+        strategies via \texttt{ProviderRegistry}, invokes \texttt{fetchAndNormalize()}, and
+        merges the results into a single unified list for the Itinerary Management Service.
 \end{itemize}
 
-Adding a new observer (e.g., a re-booking engine) requires implementing
-\texttt{IDisruptionObserver} and registering it at startup -- zero changes to
-\texttt{DisruptionEventPublisher}.
+Adding a new travel provider requires: (1) one new concrete strategy class implementing
+\texttt{IBookingStrategy}; (2) one registration entry in \texttt{ProviderRegistry}. Zero
+changes to \texttt{BookingAggregationService} or any other service, satisfying NFR5.
+
+Note: the disruption pipeline (ADR-001, Tactic 4) uses a distributed Redis Streams
+Pub/Sub architecture — a messaging construct, not the in-memory GoF Observer pattern.
+These are categorically distinct; the Strategy pattern here operates synchronously within
+a single process boundary.
 
 \subsubsection{Class Diagram}
 
 \begin{figure}[H]
   \centering
-  \includegraphics[width=0.9\textwidth]{diagrams/task3_observer.png}
-  \caption{Observer Pattern -- Disruption Event Publication}
+  \IfFileExists{diagrams/task3_strategy.png}{%
+    \includegraphics[width=0.9\textwidth]{diagrams/task3_strategy.png}%
+  }{%
+    \fbox{\parbox{0.9\textwidth}{\centering\vspace{1em}
+      \textit{Generate \texttt{task3\_strategy.png} from
+      \texttt{diagrams/task3\_strategy.puml} using PlantUML.}
+    \vspace{1em}}}%
+  }
+  \caption{Strategy Pattern -- Booking Provider Selection and Normalisation}
 \end{figure}
 
 % ================================================================
@@ -178,10 +198,10 @@ and a short-circuit at \texttt{AuthHandler} for an invalid JWT (alternate path).
 \toprule
 \textbf{Pattern} & \textbf{Category} & \textbf{NFRs} & \textbf{Key Classes} \\
 \midrule
-Observer & Behavioral & NFR2, NFR5 &
-  \texttt{DisruptionEventPublisher}, \texttt{IDisruptionObserver},
-  \texttt{NotificationObserver}, \texttt{ItineraryFlagObserver},
-  \texttt{SocialAlertObserver} \\[0.4em]
+Strategy & Behavioral & NFR5, NFR1 &
+  \texttt{IBookingStrategy}, \texttt{FlightBookingStrategy},
+  \texttt{HotelBookingStrategy}, \texttt{TransportBookingStrategy},
+  \texttt{ProviderRegistry}, \texttt{BookingAggregationService} \\[0.4em]
 Chain of Responsibility & Behavioral & NFR3, NFR5 &
   \texttt{RequestHandler}, \texttt{RateLimitHandler}, \texttt{AuthHandler},
   \texttt{SchemaValidationHandler}, \texttt{AuditLogHandler},

@@ -152,14 +152,14 @@ this deliverable and must be rendered to PNG before final submission.
 
 \subsection{View 1: Functional View — Subsystem Component Diagram}
 
-WanderSync is decomposed into six top-level subsystems connected through explicit interfaces:
+WanderSync is decomposed into seven top-level subsystems connected through explicit interfaces:
 
 \begin{enumerate}[noitemsep]
   \item \textbf{API Gateway \& Frontend Layer} — single external entry point; TLS termination;
         JWT validation middleware; React SPA delivery.
   \item \textbf{Authentication \& User Management Service} — registration, login, JWT issuance,
         profile CRUD.
-  \item \textbf{Booking Aggregation Service} — \texttt{BookingAdapter} per provider; normalises
+  \item \textbf{Booking Aggregation Service} — \texttt{IBookingStrategy} per provider; normalises
         heterogeneous provider data to \texttt{BookingRecord}.
   \item \textbf{Itinerary Management Service} — authoritative itinerary store; timeline assembly;
         caching; consumes \texttt{DisruptionEvent} messages.
@@ -167,10 +167,13 @@ WanderSync is decomposed into six top-level subsystems connected through explici
         \texttt{DisruptionEvent} to message broker.
   \item \textbf{Social Synchronisation Service} — geospatial matching; bilateral consent state
         machine; enforces privacy-preserving disclosure rules.
+  \item \textbf{Notification Service} — dedicated Redis Streams consumer; delivers in-app and
+        email alerts to affected travellers within the 10-second NFR2 window.
 \end{enumerate}
 
-The Disruption Detection Service and Itinerary/Notification services communicate exclusively
-through the message broker, realising the event-driven decoupling documented in ADR-001.
+The Disruption Detection Service, Itinerary Management Service, and Notification Service
+communicate exclusively through the message broker, realising the event-driven decoupling
+documented in ADR-001.
 
 \subsection{View 2: Information View — Data Entities and Privacy Rules}
 
@@ -205,10 +208,16 @@ The runtime topology comprises the following nodes and communication paths:
         internal HTTP; enforces JWT before forwarding.
   \item \textbf{Backend Services} — Auth, Booking Aggregation, Itinerary Management, Disruption
         Detection, Social Synchronisation — each runs as an independent process.
-  \item \textbf{Message Broker} — Disruption Detection publishes; Itinerary and Notification
-        services subscribe.
+  \item \textbf{Message Broker (Redis Streams)} — Disruption Detection publishes
+        \texttt{DisruptionEvent} messages; Itinerary Management and Notification Service
+        subscribe as independent consumer groups.
   \item \textbf{Databases} — User DB (Auth Service); Itinerary DB (Itinerary Service); Social DB
         (Social Service). Each service owns its own store.
+  \item \textbf{Redis (Data Layer)} — serves two roles: (a) the Redis Streams channel used by
+        the message broker above; (b) the short-lived response cache used by the Booking
+        Aggregation Service (60-second TTL, Tactic 1) and the itinerary cache in the Itinerary
+        Management Service. Redis is a critical state store and is classified as part of the
+        data layer alongside the relational databases.
   \item \textbf{External APIs} — Flight tracking and weather services polled or subscribed to by
         the Disruption Detection Service over HTTPS.
 \end{itemize}
