@@ -32,5 +32,6 @@ describe('ProviderRegistryService', () => {
     registry.register(s1);
     registry.register(s2);
     expect(registry.getAll()).toHaveLength(1);
+    expect(registry.getAll()[0]).toBe(s1);  // first registration wins
   });
 });
