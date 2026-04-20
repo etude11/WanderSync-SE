@@ -75,6 +75,7 @@ model BookingRecord {
   rawData       Json
   createdAt     DateTime    @default(now())
 
+  @@unique([itineraryId, providerRef])
   @@index([itineraryId, departureTime])
   @@index([providerRef])
 }
