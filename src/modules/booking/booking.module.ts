@@ -38,6 +38,7 @@ import { BookingController } from './booking.controller';
         registry.register(flight);
         registry.register(hotel);
         registry.register(transport);
+        return true;
       },
     },
   ],
