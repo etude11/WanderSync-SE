@@ -1,5 +1,5 @@
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
-import { BookingType, Role } from '@prisma/client';
+import { BookingType } from '@prisma/client';
 import { BookingService } from './booking.service';
 import { ProviderRegistryService } from './provider-registry.service';
 import { IBookingStrategy, NormalizedBooking } from './strategies/booking-strategy.interface';
@@ -85,6 +85,12 @@ describe('BookingService', () => {
     expect(strategy.fetchAndNormalize).toHaveBeenCalledWith(['AI101']);
     expect(prisma.bookingRecord.upsert).toHaveBeenCalled();
     expect(result).toHaveLength(1);
+    expect(redis.client.set).toHaveBeenCalledWith(
+      'booking-agg:itin1:aviationstack',
+      expect.any(String),
+      'EX',
+      60,
+    );
   });
 
   it('uses cache when available and skips strategy call', async () => {
@@ -98,5 +104,70 @@ describe('BookingService', () => {
 
     await service.aggregate('itin1', 'user1');
     expect(strategy.fetchAndNormalize).not.toHaveBeenCalled();
+  });
+
+  it('continues processing other strategies when one strategy rejects', async () => {
+    const failingStrategy: jest.Mocked<IBookingStrategy> = {
+      providerKey: 'failing-provider',
+      bookingType: BookingType.HOTEL,
+      fetchAndNormalize: jest.fn().mockRejectedValue(new Error('provider down')),
+    };
+    registry.register(failingStrategy);
+
+    (prisma.itinerary.findUnique as jest.Mock).mockResolvedValue(mockItinerary);
+    (prisma.bookingRecord.findMany as jest.Mock).mockResolvedValue([mockBooking]);
+    (redis.client.get as jest.Mock).mockResolvedValue(null);
+    strategy.fetchAndNormalize.mockResolvedValue([makeNormalized('AI101')]);
+    (prisma.bookingRecord.upsert as jest.Mock).mockResolvedValue(mockBooking);
+    (prisma.bookingRecord.findMany as jest.Mock)
+      .mockResolvedValueOnce([mockBooking])
+      .mockResolvedValue([mockBooking]);
+
+    const result = await service.aggregate('itin1', 'user1');
+    expect(result).toHaveLength(1);
+    expect(strategy.fetchAndNormalize).toHaveBeenCalled();
+  });
+
+  const mockBookingWithItinerary = {
+    ...mockBooking,
+    itinerary: { userId: 'user1' },
+  };
+
+  describe('findOne', () => {
+    it('throws NotFoundException when booking does not exist', async () => {
+      (prisma.bookingRecord.findFirst as jest.Mock).mockResolvedValue(null);
+      await expect(service.findOne('b1', 'user1')).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('throws ForbiddenException when booking belongs to different user', async () => {
+      (prisma.bookingRecord.findFirst as jest.Mock).mockResolvedValue({
+        ...mockBooking,
+        itinerary: { userId: 'other' },
+      });
+      await expect(service.findOne('b1', 'user1')).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('returns booking when user owns the itinerary', async () => {
+      (prisma.bookingRecord.findFirst as jest.Mock).mockResolvedValue(mockBookingWithItinerary);
+      const result = await service.findOne('b1', 'user1');
+      expect(result.id).toBe('b1');
+    });
+  });
+
+  describe('remove', () => {
+    it('deletes booking when user owns the itinerary', async () => {
+      (prisma.bookingRecord.findFirst as jest.Mock).mockResolvedValue(mockBookingWithItinerary);
+      (prisma.bookingRecord.delete as jest.Mock).mockResolvedValue(mockBooking);
+      await service.remove('b1', 'user1');
+      expect(prisma.bookingRecord.delete).toHaveBeenCalledWith({ where: { id: 'b1' } });
+    });
+
+    it('throws ForbiddenException when user does not own the booking itinerary', async () => {
+      (prisma.bookingRecord.findFirst as jest.Mock).mockResolvedValue({
+        ...mockBooking,
+        itinerary: { userId: 'other' },
+      });
+      await expect(service.remove('b1', 'user1')).rejects.toBeInstanceOf(ForbiddenException);
+    });
   });
 });

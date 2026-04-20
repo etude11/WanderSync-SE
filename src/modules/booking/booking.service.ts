@@ -26,12 +26,16 @@ export class BookingService {
 
     await Promise.allSettled(
       this.registry.getAll().map(async (strategy) => {
-        const cacheKey = `booking-agg:${userId}:${strategy.providerKey}`;
+        const cacheKey = `booking-agg:${itineraryId}:${strategy.providerKey}`;
         const cached = await this.redis.client.get(cacheKey);
 
         let normalized: NormalizedBooking[];
         if (cached) {
-          normalized = JSON.parse(cached) as NormalizedBooking[];
+          normalized = (JSON.parse(cached) as Array<Record<string, unknown>>).map((n) => ({
+            ...n,
+            departureTime: new Date(n.departureTime as string),
+            arrivalTime: new Date(n.arrivalTime as string),
+          })) as NormalizedBooking[];
         } else {
           const refs = existing
             .filter((b) => b.type === strategy.bookingType)
