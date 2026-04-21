@@ -4,9 +4,11 @@ import { FlightTrackerAdapter } from './adapters/flight-tracker.adapter';
 import { WeatherAlertAdapter } from './adapters/weather-alert.adapter';
 import { DisruptionPublisherService } from './disruption-publisher.service';
 import { DisruptionService } from './disruption.service';
+import { DisruptionController } from './disruption.controller';
 
 @Module({
   imports: [ConfigModule],
+  controllers: [DisruptionController],
   providers: [
     {
       provide: FlightTrackerAdapter,
