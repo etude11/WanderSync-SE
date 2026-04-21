@@ -13,6 +13,8 @@ import { RolesGuard } from "./common/guards/roles.guard";
 import { LoggingInterceptor } from "./common/interceptors/logging.interceptor";
 import { RateLimitMiddleware } from "./common/middleware/rate-limit.middleware";
 import { AuthModule } from "./modules/auth/auth.module";
+import { ItineraryModule } from "./modules/itinerary/itinerary.module";
+import { BookingModule } from "./modules/booking/booking.module";
 
 @Module({
   imports: [
@@ -22,6 +24,8 @@ import { AuthModule } from "./modules/auth/auth.module";
     }),
     DatabaseModule,
     AuthModule,
+    ItineraryModule,
+    BookingModule,
   ],
   providers: [
     {
