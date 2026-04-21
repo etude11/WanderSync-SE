@@ -1,0 +1,142 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Draw-path keyframe for SVG route animation ─────────────────────────────── */
+@keyframes drawPath {
+  to { stroke-dashoffset: 0; }
+}
+
+/* ── Plane trail pulse ──────────────────────────────────────────────────────── */
+@keyframes trailPulse {
+  0%, 100% { opacity: 0.4; }
+  50%      { opacity: 0.8; }
+}
+
+/* ── Gentle cloud drift ─────────────────────────────────────────────────────── */
+@keyframes cloudDrift {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(60px); }
+}
+
+/* ── Shimmer sweep for premium feel ─────────────────────────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* ── Soft glow pulse ────────────────────────────────────────────────────────── */
+@keyframes softGlow {
+  0%, 100% { box-shadow: 0 0 20px rgba(215,122,97,0.15); }
+  50%      { box-shadow: 0 0 40px rgba(215,122,97,0.25); }
+}
+
+@layer base {
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    @apply bg-platinum text-charcoal font-sans antialiased;
+  }
+
+  /* Elegant scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: #eff1f3; }
+  ::-webkit-scrollbar-thumb { background: #dbd3d8; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #d8b4a0; }
+}
+
+@layer components {
+
+  /* Primary CTA — Burnt Peach solid pastel */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2
+           px-5 py-2.5 rounded-xl font-semibold text-white
+           transition-all duration-200 cursor-pointer
+           focus:outline-none focus:ring-2 focus:ring-offset-2
+           active:scale-[0.97] disabled:opacity-60 disabled:cursor-not-allowed;
+    background-color: #d77a61;
+    box-shadow: 0 4px 20px rgba(215,122,97,0.24);
+    --tw-ring-color: #d77a61;
+  }
+  .btn-primary:hover:not(:disabled) {
+    background-color: #c96248;
+    box-shadow: 0 7px 30px rgba(215,122,97,0.35);
+    transform: translateY(-1px);
+  }
+
+  /* Ghost / Secondary */
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2
+           px-5 py-2.5 rounded-xl font-semibold
+           border-2 text-charcoal
+           bg-transparent
+           transition-all duration-200 cursor-pointer
+           focus:outline-none focus:ring-2 focus:ring-charcoal/20
+           active:scale-[0.97];
+    border-color: rgba(34,56,67,0.18);
+  }
+  .btn-secondary:hover {
+    background-color: rgba(34,56,67,0.05);
+    border-color: rgba(34,56,67,0.30);
+    transform: translateY(-1px);
+  }
+
+  /* Form inputs — pastel solid */
+  .input-field {
+    @apply w-full px-3.5 py-3 rounded-xl text-sm text-charcoal
+           bg-white border border-dust-grey
+           placeholder-charcoal/30
+           focus:outline-none focus:ring-2 focus:border-transparent
+           transition-all duration-200;
+    --tw-ring-color: rgba(215,122,97,0.35);
+  }
+  .input-field:focus {
+    box-shadow: 0 0 0 3px rgba(215,122,97,0.12);
+  }
+
+  /* Generic card — solid pastel, no glass */
+  .card {
+    @apply bg-white border rounded-2xl shadow-card p-5;
+    border-color: rgba(219,211,216,0.60);
+  }
+
+  /* Premium card with hover lift */
+  .card-hover {
+    @apply bg-white border rounded-2xl shadow-card p-6
+           transition-all duration-300 cursor-default;
+    border-color: rgba(219,211,216,0.50);
+  }
+  .card-hover:hover {
+    box-shadow: 0 10px 48px rgba(34,56,67,0.13);
+    transform: translateY(-4px);
+  }
+
+  /* Timeline vertical bar */
+  .timeline-line {
+    @apply absolute left-[9px] top-0 bottom-0 w-px;
+    background: linear-gradient(to bottom, rgba(215,122,97,0.45), rgba(216,180,160,0.3), transparent);
+  }
+
+  /* Pastel section divider */
+  .section-divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(216,180,160,0.40), transparent);
+  }
+
+  /* Pastel dot pattern overlay */
+  .pastel-dots {
+    background-image: radial-gradient(rgba(219,211,216,0.35) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+}
+
+/* ── Reduced motion: disable SVG flight animations ───────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .flight-plane       { display: none; }
+  .draw-path-anim     { animation: none !important; stroke-dashoffset: 0 !important; }
+  .cloud-drift        { animation: none !important; }
+  .animate-float      { animation: none !important; }
+  .trail-pulse        { animation: none !important; }
+}
