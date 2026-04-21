@@ -12,9 +12,11 @@ import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
 import { RolesGuard } from "./common/guards/roles.guard";
 import { LoggingInterceptor } from "./common/interceptors/logging.interceptor";
 import { RateLimitMiddleware } from "./common/middleware/rate-limit.middleware";
+import { ScheduleModule } from "@nestjs/schedule";
 import { AuthModule } from "./modules/auth/auth.module";
 import { ItineraryModule } from "./modules/itinerary/itinerary.module";
 import { BookingModule } from "./modules/booking/booking.module";
+import { DisruptionModule } from "./modules/disruption/disruption.module";
 
 @Module({
   imports: [
@@ -22,10 +24,12 @@ import { BookingModule } from "./modules/booking/booking.module";
       isGlobal: true,
       load: [configuration],
     }),
+    ScheduleModule.forRoot(),
     DatabaseModule,
     AuthModule,
     ItineraryModule,
     BookingModule,
+    DisruptionModule,
   ],
   providers: [
     {

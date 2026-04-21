@@ -18,4 +18,10 @@ export default () => ({
       process.env.DATABASE_URL ??
       "postgresql://user:password@localhost:5432/wandersync",
   },
+  aviationstack: {
+    apiKey: process.env.AVIATIONSTACK_API_KEY ?? "",
+  },
+  openweathermap: {
+    apiKey: process.env.OWM_API_KEY ?? "",
+  },
 });
