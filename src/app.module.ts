@@ -17,6 +17,7 @@ import { AuthModule } from "./modules/auth/auth.module";
 import { ItineraryModule } from "./modules/itinerary/itinerary.module";
 import { BookingModule } from "./modules/booking/booking.module";
 import { DisruptionModule } from "./modules/disruption/disruption.module";
+import { NotificationModule } from "./modules/notification/notification.module";
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { DisruptionModule } from "./modules/disruption/disruption.module";
     ItineraryModule,
     BookingModule,
     DisruptionModule,
+    NotificationModule,
   ],
   providers: [
     {
