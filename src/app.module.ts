@@ -9,6 +9,7 @@ import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";
 import configuration from "./config/configuration";
 import { DatabaseModule } from "./database/database.module";
 import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
+import { JwtAuthGuard } from "./common/guards/jwt-auth.guard";
 import { RolesGuard } from "./common/guards/roles.guard";
 import { LoggingInterceptor } from "./common/interceptors/logging.interceptor";
 import { RateLimitMiddleware } from "./common/middleware/rate-limit.middleware";
@@ -18,6 +19,7 @@ import { ItineraryModule } from "./modules/itinerary/itinerary.module";
 import { BookingModule } from "./modules/booking/booking.module";
 import { DisruptionModule } from "./modules/disruption/disruption.module";
 import { NotificationModule } from "./modules/notification/notification.module";
+import { SocialModule } from "./modules/social/social.module";
 
 @Module({
   imports: [
@@ -32,8 +34,13 @@ import { NotificationModule } from "./modules/notification/notification.module";
     BookingModule,
     DisruptionModule,
     NotificationModule,
+    SocialModule,
   ],
   providers: [
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard,
+    },
     {
       provide: APP_GUARD,
       useClass: RolesGuard,
