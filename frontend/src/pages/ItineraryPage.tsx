@@ -36,7 +36,7 @@ export default function ItineraryPage() {
 
   useEffect(() => { load().finally(() => setLoading(false)); }, []);
 
-  const handleAddBooking = async (data: { providerKey: string; providerRef: string; type: BookingType }) => {
+  const handleAddBooking = async (data: { providerRef: string; type: BookingType; departureTime: string; arrivalTime: string; origin: string; destination: string }) => {
     if (!selected) return;
     await itineraryAPI.addBooking(selected.id, data);
     await load();

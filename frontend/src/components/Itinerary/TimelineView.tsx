@@ -22,7 +22,7 @@ export default function TimelineView({ bookings, onRemoveBooking }: TimelineView
   }
 
   const sorted = [...bookings].sort(
-    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    (a, b) => new Date(a.departureTime).getTime() - new Date(b.departureTime).getTime()
   );
 
   return (

@@ -15,16 +15,19 @@ export interface AuthTokens {
 
 // Itinerary
 export type BookingType = 'FLIGHT' | 'HOTEL' | 'TRANSPORT';
-export type BookingStatus = 'CONFIRMED' | 'PENDING' | 'CANCELLED' | 'DISRUPTED';
 
 export interface Booking {
   id: string;
   itineraryId: string;
   type: BookingType;
-  providerKey: string;
+  provider: string;
   providerRef: string;
-  data: Record<string, unknown>;
+  rawData: Record<string, unknown>;
   disrupted: boolean;
+  departureTime: string;
+  arrivalTime: string;
+  origin: string;
+  destination: string;
   createdAt: string;
 }
 
@@ -32,8 +35,6 @@ export interface Itinerary {
   id: string;
   userId: string;
   title: string;
-  startDate: string;
-  endDate: string;
   bookings: Booking[];
   createdAt: string;
   updatedAt: string;

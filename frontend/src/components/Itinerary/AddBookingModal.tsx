@@ -1,16 +1,25 @@
 import { useState } from 'react';
 import type { BookingType } from '@/types';
 
+interface AddBookingData {
+  providerRef: string;
+  type: BookingType;
+  departureTime: string;
+  arrivalTime: string;
+  origin: string;
+  destination: string;
+}
+
 interface AddBookingModalProps {
   itineraryId: string;
-  onAdd: (data: { providerKey: string; providerRef: string; type: BookingType }) => Promise<void>;
+  onAdd: (data: AddBookingData) => Promise<void>;
   onClose: () => void;
 }
 
-const PROVIDERS: { key: string; type: BookingType; label: string }[] = [
-  { key: 'aviationstack', type: 'FLIGHT',    label: 'AviationStack (Flight)' },
-  { key: 'hotel-stub',    type: 'HOTEL',     label: 'Hotel (stub)' },
-  { key: 'transport-stub',type: 'TRANSPORT', label: 'Transport (stub)' },
+const TYPES: { value: BookingType; label: string }[] = [
+  { value: 'FLIGHT',    label: 'Flight' },
+  { value: 'HOTEL',     label: 'Hotel' },
+  { value: 'TRANSPORT', label: 'Transport' },
 ];
 
 const XIcon = () => (
@@ -20,23 +29,36 @@ const XIcon = () => (
 );
 
 export default function AddBookingModal({ onAdd, onClose }: AddBookingModalProps) {
-  const [providerKey, setProviderKey] = useState(PROVIDERS[0].key);
+  const [type, setType]               = useState<BookingType>('FLIGHT');
   const [providerRef, setProviderRef] = useState('');
+  const [origin, setOrigin]           = useState('');
+  const [destination, setDest]        = useState('');
+  const [departure, setDeparture]     = useState('');
+  const [arrival, setArrival]         = useState('');
   const [loading, setLoading]         = useState(false);
   const [error, setError]             = useState('');
 
-  const selected = PROVIDERS.find((p) => p.key === providerKey)!;
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!providerRef.trim()) { setError('Reference is required'); return; }
-    setLoading(true);
     setError('');
+    if (!providerRef.trim()) { setError('Reference is required'); return; }
+    if (!origin.trim() || !destination.trim()) { setError('Origin and destination are required'); return; }
+    if (!departure || !arrival) { setError('Departure and arrival times are required'); return; }
+    if (new Date(arrival) <= new Date(departure)) { setError('Arrival must be after departure'); return; }
+
+    setLoading(true);
     try {
-      await onAdd({ providerKey: selected.key, providerRef: providerRef.trim(), type: selected.type });
+      await onAdd({
+        providerRef:   providerRef.trim().toUpperCase(),
+        type,
+        departureTime: new Date(departure).toISOString(),
+        arrivalTime:   new Date(arrival).toISOString(),
+        origin:        origin.trim().toUpperCase(),
+        destination:   destination.trim().toUpperCase(),
+      });
       onClose();
     } catch {
-      setError('Failed to add booking. Check the reference and try again.');
+      setError('Failed to add booking. Check the details and try again.');
     } finally {
       setLoading(false);
     }
@@ -57,23 +79,23 @@ export default function AddBookingModal({ onAdd, onClose }: AddBookingModalProps
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Type */}
           <div>
-            <label className="block text-xs font-semibold text-charcoal/55 mb-1.5 tracking-wide">Provider</label>
+            <label className="block text-xs font-semibold text-charcoal/55 mb-1.5 tracking-wide">Type</label>
             <select
-              value={providerKey}
-              onChange={(e) => setProviderKey(e.target.value)}
+              value={type}
+              onChange={(e) => setType(e.target.value as BookingType)}
               className="input-field cursor-pointer"
             >
-              {PROVIDERS.map((p) => (
-                <option key={p.key} value={p.key}>{p.label}</option>
-              ))}
+              {TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
           </div>
 
+          {/* Reference */}
           <div>
             <label className="block text-xs font-semibold text-charcoal/55 mb-1.5 tracking-wide">
-              Provider Reference
-              <span className="ml-1 font-normal text-charcoal/35">(e.g. AA123 for flights)</span>
+              Reference
+              <span className="ml-1 font-normal text-charcoal/35">(e.g. AA123)</span>
             </label>
             <input
               type="text"
@@ -83,6 +105,58 @@ export default function AddBookingModal({ onAdd, onClose }: AddBookingModalProps
               className="input-field font-mono"
               autoFocus
             />
+          </div>
+
+          {/* Origin / Destination */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-charcoal/55 mb-1.5 tracking-wide">
+                Origin <span className="font-normal text-charcoal/35">(IATA)</span>
+              </label>
+              <input
+                type="text"
+                value={origin}
+                onChange={(e) => setOrigin(e.target.value)}
+                placeholder="e.g. DEL"
+                maxLength={10}
+                className="input-field font-mono"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-charcoal/55 mb-1.5 tracking-wide">
+                Destination <span className="font-normal text-charcoal/35">(IATA)</span>
+              </label>
+              <input
+                type="text"
+                value={destination}
+                onChange={(e) => setDest(e.target.value)}
+                placeholder="e.g. LHR"
+                maxLength={10}
+                className="input-field font-mono"
+              />
+            </div>
+          </div>
+
+          {/* Departure / Arrival */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-charcoal/55 mb-1.5 tracking-wide">Departure</label>
+              <input
+                type="datetime-local"
+                value={departure}
+                onChange={(e) => setDeparture(e.target.value)}
+                className="input-field"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-charcoal/55 mb-1.5 tracking-wide">Arrival</label>
+              <input
+                type="datetime-local"
+                value={arrival}
+                onChange={(e) => setArrival(e.target.value)}
+                className="input-field"
+              />
+            </div>
           </div>
 
           {error && (

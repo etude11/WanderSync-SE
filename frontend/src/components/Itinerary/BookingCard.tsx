@@ -67,8 +67,8 @@ export default function BookingCard({ booking, onRemove }: BookingCardProps) {
           <div className="flex items-center gap-2 mb-0.5">
             <span className="text-[10px] font-semibold tracking-widest uppercase" style={{ color: meta.color, opacity: 0.7 }}>{meta.label}</span>
           </div>
-          <p className="text-sm font-semibold text-charcoal font-mono">{booking.providerRef}</p>
-          <p className="text-xs text-charcoal/40 mt-0.5 font-sans">{booking.providerKey} · {new Date(booking.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+          <p className="text-sm font-semibold text-charcoal font-mono">{booking.providerRef} · {booking.origin} → {booking.destination}</p>
+          <p className="text-xs text-charcoal/40 mt-0.5 font-sans">{new Date(booking.departureTime).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
         </div>
 
         {onRemove && (
