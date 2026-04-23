@@ -130,6 +130,46 @@
     background-image: radial-gradient(rgba(219,211,216,0.35) 1px, transparent 1px);
     background-size: 28px 28px;
   }
+
+  /* ── Scroll-reveal states ──────────────────────────────────────────────────── */
+  /* Elements start hidden; JS adds `data-visible` to trigger animation */
+  .reveal-on-scroll {
+    opacity: 0;
+    transform: translateY(40px);
+    transition: opacity 0.65s cubic-bezier(0.16,1,0.3,1), transform 0.65s cubic-bezier(0.16,1,0.3,1);
+  }
+  .reveal-on-scroll.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .reveal-left {
+    opacity: 0;
+    transform: translateX(-32px);
+    transition: opacity 0.65s cubic-bezier(0.16,1,0.3,1), transform 0.65s cubic-bezier(0.16,1,0.3,1);
+  }
+  .reveal-left.is-visible {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  .reveal-right {
+    opacity: 0;
+    transform: translateX(32px);
+    transition: opacity 0.65s cubic-bezier(0.16,1,0.3,1), transform 0.65s cubic-bezier(0.16,1,0.3,1);
+  }
+  .reveal-right.is-visible {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  /* ── 3D card tilt wrapper ─────────────────────────────────────────────────── */
+  .tilt-wrapper {
+    perspective: 900px;
+  }
+  .tilt-card {
+    transform-style: preserve-3d;
+    transition: transform 0.18s ease-out, box-shadow 0.18s ease-out;
+    will-change: transform;
+  }
 }
 
 /* ── Reduced motion: disable SVG flight animations ───────────────────────────── */
@@ -139,4 +179,8 @@
   .cloud-drift        { animation: none !important; }
   .animate-float      { animation: none !important; }
   .trail-pulse        { animation: none !important; }
+  /* Skip scroll reveal transitions for motion-sensitive users */
+  .reveal-on-scroll,
+  .reveal-left,
+  .reveal-right       { transition: none !important; opacity: 1 !important; transform: none !important; }
 }
