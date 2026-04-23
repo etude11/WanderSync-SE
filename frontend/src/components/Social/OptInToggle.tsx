@@ -1,28 +1,37 @@
+const ShieldIcon = () => (
+  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
+  </svg>
+);
+
 interface OptInToggleProps {
   enabled: boolean;
-  onChange: (val: boolean) => void;
+  onChange: (v: boolean) => void;
 }
 
 export default function OptInToggle({ enabled, onChange }: OptInToggleProps) {
   return (
-    <label className="flex items-center gap-3 cursor-pointer select-none">
-      <button
-        role="switch"
-        aria-checked={enabled}
-        onClick={() => onChange(!enabled)}
-        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-slate-950 ${
-          enabled ? 'bg-brand-600' : 'bg-slate-700'
-        }`}
+    <button
+      onClick={() => onChange(!enabled)}
+      className="flex items-center gap-2 text-sm font-medium px-3.5 py-2 rounded-xl border transition-all duration-200 cursor-pointer"
+      style={enabled
+        ? { background: 'rgba(215,122,97,0.10)', borderColor: 'rgba(215,122,97,0.30)', color: '#d77a61' }
+        : { background: 'white', borderColor: 'rgba(219,211,216,0.70)', color: 'rgba(34,56,67,0.55)' }
+      }
+      aria-pressed={enabled}
+    >
+      <ShieldIcon />
+      {enabled ? 'Discovery On' : 'Discovery Off'}
+      {/* Toggle pill */}
+      <span
+        className="ml-1 inline-flex w-8 h-4 rounded-full relative transition-all duration-200"
+        style={{ background: enabled ? '#d77a61' : '#dbd3d8' }}
       >
         <span
-          className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${
-            enabled ? 'translate-x-6' : 'translate-x-1'
-          }`}
+          className="absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-all duration-200"
+          style={{ left: enabled ? '18px' : '2px' }}
         />
-      </button>
-      <span className="text-sm text-slate-300">
-        {enabled ? 'Social discovery on' : 'Social discovery off'}
       </span>
-    </label>
+    </button>
   );
 }

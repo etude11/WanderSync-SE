@@ -1,8 +1,8 @@
-# WanderSync — Implementation Design Specification
+# WanderSync: Implementation Design Specification
 
 **Team 15 | TypeScript (NestJS) Modular Monolith**
 
-This document is the single reference for implementation. It is grounded in the architecture decisions (ADR-001–004), tactics (Task 3), and subsystem boundaries (Task 1) already established. Everything here is concrete and actionable; nothing is aspirational.
+This document is the single reference for implementation. It is grounded in the architecture decisions (ADR-001-004), tactics (Task 3), and subsystem boundaries (Task 1) already established. Everything here is concrete and actionable; nothing is aspirational.
 
 ---
 
@@ -224,12 +224,12 @@ WanderSync-SE/
 │   ├── database/
 │   │   ├── prisma.service.ts                # PrismaClient singleton (OnModuleInit/Destroy lifecycle)
 │   │   └── redis.service.ts                 # ioredis client (cache + Streams), shared across modules
-│   ├── common/                              # Subsystem 1 — API Gateway / CoR chain
+│   ├── common/                              # Subsystem 1: API Gateway / CoR chain
 │   │   ├── guards/
-│   │   │   ├── jwt-auth.guard.ts            # CoR: AuthHandler — validates JWT, returns 401
+│   │   │   ├── jwt-auth.guard.ts            # CoR: AuthHandler: validates JWT, returns 401
 │   │   │   └── roles.guard.ts               # CoR: coarse Role AuthZ (TRAVELLER/ADMIN)
 │   │   ├── interceptors/
-│   │   │   ├── logging.interceptor.ts       # CoR: AuditLogHandler — logs userId + endpoint
+│   │   │   ├── logging.interceptor.ts       # CoR: AuditLogHandler: logs userId + endpoint
 │   │   │   └── transform.interceptor.ts     # Wraps response in { data, statusCode }
 │   │   ├── filters/
 │   │   │   └── http-exception.filter.ts     # Uniform error shape
@@ -239,7 +239,7 @@ WanderSync-SE/
 │   │   │   ├── current-user.decorator.ts    # Extracts User from JWT payload on request
 │   │   │   └── roles.decorator.ts           # @Roles(Role.ADMIN) metadata decorator
 │   │   └── middleware/
-│   │       └── rate-limit.middleware.ts     # CoR: RateLimitHandler — Redis counter per IP
+│   │       └── rate-limit.middleware.ts     # CoR: RateLimitHandler: Redis counter per IP
 │   └── modules/
 │       ├── auth/                            # Subsystem 2: Auth & User Management
 │       │   ├── auth.module.ts
@@ -257,7 +257,7 @@ WanderSync-SE/
 │       │   └── dto/
 │       │       ├── create-itinerary.dto.ts
 │       │       └── add-booking.dto.ts
-│       ├── booking/                         # Subsystem 3: Booking Aggregation — Strategy Pattern
+│       ├── booking/                         # Subsystem 3: Booking Aggregation: Strategy Pattern
 │       │   ├── booking.module.ts
 │       │   ├── booking.controller.ts
 │       │   ├── booking.service.ts           # Context: iterates registry.getAll(), merges BookingRecord[]
@@ -283,7 +283,7 @@ WanderSync-SE/
 │       │   ├── notification.module.ts
 │       │   ├── notification.controller.ts
 │       │   └── notification.service.ts      # XREADGROUP consumer on disruption-events; writes NotificationLog
-│       └── social/                          # Subsystem 6: STUBBED — returns 501 Not Implemented
+│       └── social/                          # Subsystem 6: STUBBED: returns 501 Not Implemented
 │           ├── social.module.ts
 │           └── social.controller.ts         # All routes return 501; no service logic
 ├── prisma/
@@ -320,7 +320,7 @@ The `IBookingStrategy` interface (`booking/strategies/booking-strategy.interface
 
 | Provider | Status | API Access | Strategy Class | Key Endpoint / Notes |
 |---|---|---|---|---|
-| **AviationStack** | **ACTIVE** | Free: 100 req/mo, no credit card | `AviationstackFlightStrategy` | `GET https://api.aviationstack.com/v1/flights?access_key=KEY&flight_iata={iata}` — Response fields used: `flight_status`, `departure.delay`, `departure.scheduled`, `arrival.scheduled`. Disruption triggers: `status ∈ {cancelled, incident, diverted}` or `delay > 30`. |
+| **AviationStack** | **ACTIVE** | Free: 100 req/mo, no credit card | `AviationstackFlightStrategy` | `GET https://api.aviationstack.com/v1/flights?access_key=KEY&flight_iata={iata}`: Response fields used: `flight_status`, `departure.delay`, `departure.scheduled`, `arrival.scheduled`. Disruption triggers: `status ∈ {cancelled, incident, diverted}` or `delay > 30`. |
 | **Amadeus for Developers** | FUTURE / FREE (sandbox) | Free sandbox; production requires partner sign-off | `AmadeusFlightStrategy` | OAuth2 token: `POST https://test.api.amadeus.com/v1/security/oauth2/token`. Search: `GET /v1/shopping/flight-offers?originLocationCode=DEL&destinationLocationCode=BOM&departureDate=YYYY-MM-DD&adults=1`. Best candidate for a production-grade free-tier flight strategy. |
 | **AirLabs** | FUTURE / FREE | Free: 100 req/day | `AirlabsFlightStrategy` | `GET https://airlabs.co/api/v9/flights?flight_iata={iata}&api_key=KEY`. Can supplement AviationStack when free quota is exhausted. |
 | **Skyscanner (via RapidAPI)** | FUTURE / PAID | ~$10–50/month (RapidAPI) | `SkyscannerFlightStrategy` | `GET https://skyscanner-api.p.rapidapi.com/v3/flights/live/search/create`. Good for flight search; does not provide live status. |
@@ -397,14 +397,14 @@ notify disruptions. All subsystems that serve this goal are implemented in full.
 
 | Subsystem | Status | Owner |
 |---|---|---|
-| 1 — CoR Gateway (`common/`) | **Implemented** | etude11 |
-| 2 — Auth (`auth/`) | **Implemented** | etude11 |
-| 3 — Booking Aggregation (`booking/`) | **Implemented** | manasimundada |
-| 4 — Itinerary Management (`itinerary/`) | **Implemented** | manasimundada |
-| 5 — Disruption Detection (`disruption/`) | **Implemented** | udaybindal01 |
-| 7 — Notification (`notification/`) | **Implemented** | Fane1824 |
+| 1: CoR Gateway (`common/`) | **Implemented** | etude11 |
+| 2: Auth (`auth/`) | **Implemented** | etude11 |
+| 3: Booking Aggregation (`booking/`) | **Implemented** | manasimundada |
+| 4: Itinerary Management (`itinerary/`) | **Implemented** | manasimundada |
+| 5: Disruption Detection (`disruption/`) | **Implemented** | udaybindal01 |
+| 7: Notification (`notification/`) | **Implemented** | Fane1824 |
 
-### Non-Core — Stubbed
+### Non-Core: Stubbed
 
 **Social Travel Synchronisation (FR5, Subsystem 6)** is deferred. The project proposal describes
 it as "a lightweight social component"; the app fully delivers its core value without it. The
