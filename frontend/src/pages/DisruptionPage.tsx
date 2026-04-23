@@ -33,9 +33,6 @@ export default function DisruptionPage() {
 
   if (loading) return <LoadingSpinner size="lg" className="h-64" />;
 
-  const active   = disruptions.filter((d) => !d.resolved);
-  const resolved = disruptions.filter((d) => d.resolved);
-
   return (
     <div className="max-w-3xl mx-auto space-y-6 animate-fade-in">
 
@@ -44,8 +41,8 @@ export default function DisruptionPage() {
         <div>
           <h1 className="font-serif text-2xl font-semibold text-charcoal">Disruptions</h1>
           <p className="text-sm text-charcoal/45 mt-0.5">
-            {active.length > 0
-              ? `${active.length} active alert${active.length !== 1 ? 's' : ''}`
+            {disruptions.length > 0
+              ? `${disruptions.length} alert${disruptions.length !== 1 ? 's' : ''}`
               : 'All systems clear'}
           </p>
         </div>
@@ -59,24 +56,7 @@ export default function DisruptionPage() {
         </button>
       </div>
 
-      {/* Active disruptions */}
-      {active.length > 0 && (
-        <section>
-          <h2 className="text-xs font-semibold tracking-widest uppercase text-charcoal/40 mb-3">Active</h2>
-          <DisruptionList disruptions={active} />
-        </section>
-      )}
-
-      {/* Resolved */}
-      {resolved.length > 0 && (
-        <section>
-          <h2 className="text-xs font-semibold tracking-widest uppercase text-charcoal/40 mb-3">Resolved</h2>
-          <DisruptionList disruptions={resolved} />
-        </section>
-      )}
-
-      {/* Empty */}
-      {disruptions.length === 0 && <DisruptionList disruptions={[]} />}
+      <DisruptionList disruptions={disruptions} />
     </div>
   );
 }

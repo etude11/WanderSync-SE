@@ -46,7 +46,7 @@ export default function DashboardPage() {
   if (loading) return <LoadingSpinner size="lg" className="h-64" />;
 
   const displayName = user?.displayName ?? user?.email?.split('@')[0] ?? 'Traveller';
-  const activeDisruptions = disruptions.filter((d) => !d.resolved);
+  const activeDisruptions = disruptions;
   const latest = itineraries[0] ?? null;
 
   return (

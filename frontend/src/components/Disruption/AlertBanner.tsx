@@ -11,8 +11,7 @@ interface AlertBannerProps {
 }
 
 export default function AlertBanner({ disruptions }: AlertBannerProps) {
-  const active = disruptions.filter((d) => !d.resolved);
-  if (active.length === 0) return null;
+  if (disruptions.length === 0) return null;
 
   return (
     <div
@@ -22,9 +21,9 @@ export default function AlertBanner({ disruptions }: AlertBannerProps) {
       <span style={{ color: '#d77a61', marginTop: '1px' }}><BoltIcon /></span>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold" style={{ color: '#c96248' }}>
-          {active.length} active disruption{active.length !== 1 ? 's' : ''} detected
+          {disruptions.length} active disruption{disruptions.length !== 1 ? 's' : ''} detected
         </p>
-        <p className="text-xs mt-0.5 text-charcoal/50 truncate">{active[0].description}</p>
+        <p className="text-xs mt-0.5 text-charcoal/50 truncate">{disruptions[0].description}</p>
       </div>
     </div>
   );

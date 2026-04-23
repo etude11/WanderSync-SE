@@ -12,8 +12,8 @@ export interface NotificationItem {
 
 export const notificationAPI = {
   list: (page = 1, limit = 20) =>
-    api.get<{ data: NotificationItem[]; total: number }>(`/v1/notifications?page=${page}&limit=${limit}`),
+    api.get<{ data: NotificationItem[]; total: number }>(`/notifications?page=${page}&limit=${limit}`),
 
   markRead: (id: string) =>
-    api.patch<NotificationItem>(`/v1/notifications/${id}/read`),
+    api.patch<NotificationItem>(`/notifications/${id}/read`),
 };

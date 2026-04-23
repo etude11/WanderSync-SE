@@ -40,18 +40,24 @@ export interface Itinerary {
   updatedAt: string;
 }
 
-// Disruptions
-export type DisruptionSeverity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+// Disruptions — matches DisruptionEvent on backend
+export type DisruptionSeverityLabel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 
 export interface Disruption {
   id: string;
-  itineraryId: string;
-  bookingId: string;
   type: string;
-  severity: DisruptionSeverity;
+  severity: number;
   description: string;
-  detectedAt: string;
-  resolved: boolean;
+  flightIata: string | null;
+  affectedOrigin: string | null;
+  publishedAt: string;
+}
+
+export function severityLabel(n: number): DisruptionSeverityLabel {
+  if (n <= 25) return 'LOW';
+  if (n <= 50) return 'MEDIUM';
+  if (n <= 75) return 'HIGH';
+  return 'CRITICAL';
 }
 
 // Social
