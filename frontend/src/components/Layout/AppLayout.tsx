@@ -4,11 +4,11 @@ import SideNavigation from './SideNavigation';
 
 export default function AppLayout() {
   return (
-    <div className="min-h-screen flex flex-col bg-slate-950">
+    <div className="min-h-screen flex flex-col bg-platinum">
       <TopNavbar />
       <div className="flex flex-1 overflow-hidden">
         <SideNavigation />
-        <main className="flex-1 overflow-y-auto p-6 animate-fade-in">
+        <main className="flex-1 overflow-y-auto p-6 md:p-8 animate-fade-in">
           <Outlet />
         </main>
       </div>

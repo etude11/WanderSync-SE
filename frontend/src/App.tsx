@@ -8,6 +8,7 @@ import DashboardPage from '@/pages/DashboardPage';
 import ItineraryPage from '@/pages/ItineraryPage';
 import DisruptionPage from '@/pages/DisruptionPage';
 import SocialPage from '@/pages/SocialPage';
+import NotificationsPage from '@/pages/NotificationsPage';
 
 export default function App() {
   return (
@@ -21,10 +22,11 @@ export default function App() {
         {/* Protected */}
         <Route element={<PrivateRoute />}>
           <Route element={<AppLayout />}>
-            <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/itinerary" element={<ItineraryPage />} />
-            <Route path="/disruptions" element={<DisruptionPage />} />
-            <Route path="/social" element={<SocialPage />} />
+            <Route path="/dashboard"     element={<DashboardPage />} />
+            <Route path="/itinerary"     element={<ItineraryPage />} />
+            <Route path="/disruptions"   element={<DisruptionPage />} />
+            <Route path="/social"        element={<SocialPage />} />
+            <Route path="/notifications" element={<NotificationsPage />} />
           </Route>
         </Route>
 
