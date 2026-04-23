@@ -59,7 +59,7 @@ export default function ItineraryPage() {
     if (!newTitle.trim()) return;
     setCreating(true);
     try {
-      await itineraryAPI.create({ title: newTitle.trim(), startDate: '', endDate: '' });
+      await itineraryAPI.create({ title: newTitle.trim() });
       setNewTitle('');
       setShowCreate(false);
       await load();

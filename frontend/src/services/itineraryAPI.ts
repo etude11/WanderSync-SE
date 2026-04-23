@@ -6,10 +6,10 @@ export const itineraryAPI = {
 
   get: (id: string) => api.get<Itinerary>(`/itineraries/${id}`),
 
-  create: (data: { title: string; startDate: string; endDate: string }) =>
+  create: (data: { title: string }) =>
     api.post<Itinerary>('/itineraries', data),
 
-  update: (id: string, data: Partial<{ title: string; startDate: string; endDate: string }>) =>
+  update: (id: string, data: Partial<{ title: string }>) =>
     api.patch<Itinerary>(`/itineraries/${id}`, data),
 
   remove: (id: string) => api.delete(`/itineraries/${id}`),
