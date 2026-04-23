@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { itineraryAPI } from '@/services/itineraryAPI';
-import type { Itinerary, BookingType } from '@/types';
+import type { Itinerary, Booking, BookingType } from '@/types';
 import TimelineView from '@/components/Itinerary/TimelineView';
 import AddBookingModal from '@/components/Itinerary/AddBookingModal';
 import LoadingSpinner from '@/components/Shared/LoadingSpinner';
@@ -36,22 +36,39 @@ export default function ItineraryPage() {
 
   useEffect(() => { load().finally(() => setLoading(false)); }, []);
 
+  const sortByDep = (bookings: Booking[]) =>
+    [...bookings].sort((a, b) => new Date(a.departureTime).getTime() - new Date(b.departureTime).getTime());
+
   const handleAddBooking = async (data: { providerRef: string; type: BookingType; departureTime: string; arrivalTime: string; origin: string; destination: string }) => {
     if (!selected) return;
-    await itineraryAPI.addBooking(selected.id, data);
-    await load();
+    const r = await itineraryAPI.addBooking(selected.id, data);
+    const newBooking = r.data;
+    setItineraries((prev) =>
+      prev.map((it) => it.id === selected.id
+        ? { ...it, bookings: sortByDep([...(it.bookings ?? []), newBooking]) }
+        : it
+      )
+    );
+    setSelected((prev) => prev
+      ? { ...prev, bookings: sortByDep([...(prev.bookings ?? []), newBooking]) }
+      : prev
+    );
   };
 
   const handleRemoveBooking = async (bookingId: string) => {
     if (!selected) return;
+    const updated = { ...selected, bookings: (selected.bookings ?? []).filter((b) => b.id !== bookingId) };
+    setSelected(updated);
+    setItineraries((prev) => prev.map((it) => it.id === selected.id ? updated : it));
     await itineraryAPI.removeBooking(selected.id, bookingId);
-    await load();
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this itinerary and all its bookings?')) return;
+    const remaining = itineraries.filter((it) => it.id !== id);
+    setItineraries(remaining);
+    setSelected((prev) => prev?.id === id ? (remaining[0] ?? null) : prev);
     await itineraryAPI.remove(id);
-    await load();
   };
 
   const handleCreate = async (e: React.FormEvent) => {
