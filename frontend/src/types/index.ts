@@ -2,8 +2,10 @@
 export interface User {
   id: string;
   email: string;
-  name?: string;
+  displayName: string;
+  role: 'TRAVELLER' | 'ADMIN';
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface AuthTokens {
