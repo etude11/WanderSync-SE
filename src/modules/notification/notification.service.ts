@@ -37,6 +37,10 @@ export class NotificationService implements OnModuleInit {
       );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('unknown command') || msg.includes('xgroup')) {
+        this.logger.warn('Redis Streams not supported in this version. Stream consumption disabled.');
+        return;
+      }
       if (!msg.includes('BUSYGROUP')) throw err;
       this.logger.log('Consumer group already exists, continuing');
     }
@@ -44,20 +48,26 @@ export class NotificationService implements OnModuleInit {
 
   @Cron(CronExpression.EVERY_5_SECONDS)
   async consumeStream(): Promise<void> {
-    const results = (await (this.redis.client as unknown as {
-      xreadgroup: (...args: (string | number)[]) => Promise<XReadGroupResult>;
-    }).xreadgroup(
-      'GROUP', NotificationService.GROUP, NotificationService.CONSUMER,
-      'COUNT', 10,
-      'STREAMS', NotificationService.STREAM_KEY, '>',
-    )) as XReadGroupResult;
+    try {
+      const results = (await (this.redis.client as unknown as {
+        xreadgroup: (...args: (string | number)[]) => Promise<XReadGroupResult>;
+      }).xreadgroup(
+        'GROUP', NotificationService.GROUP, NotificationService.CONSUMER,
+        'COUNT', 10,
+        'STREAMS', NotificationService.STREAM_KEY, '>',
+      )) as XReadGroupResult;
 
-    if (!results) return;
+      if (!results) return;
 
-    for (const [, messages] of results) {
-      for (const [msgId, fields] of messages) {
-        await this.processMessage(msgId, fields);
+      for (const [, messages] of results) {
+        for (const [msgId, fields] of messages) {
+          await this.processMessage(msgId, fields);
+        }
       }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('unknown command')) return;
+      this.logger.error('Error consuming stream:', err);
     }
   }
 
