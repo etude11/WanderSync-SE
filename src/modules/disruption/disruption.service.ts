@@ -131,4 +131,22 @@ export class DisruptionService {
     ]);
     return { data, total };
   }
+
+  async simulateDemoDisruption(userId: string): Promise<DisruptionEvent> {
+    const flight = await this.prisma.bookingRecord.findFirst({
+      where: { itinerary: { userId }, type: BookingType.FLIGHT },
+      orderBy: { createdAt: 'asc' },
+    });
+    const anyBooking = !flight
+      ? await this.prisma.bookingRecord.findFirst({ where: { itinerary: { userId } } })
+      : null;
+
+    const event = await this.prisma.disruptionEvent.create({
+      data: flight
+        ? { type: 'FLIGHT_DELAY', severity: 60, description: `Delay detected for flight ${flight.providerRef}`, flightIata: flight.providerRef, affectedOrigin: null }
+        : { type: 'SEVERE_WEATHER', severity: 45, description: `Weather alert for ${anyBooking?.origin ?? 'DEL'}`, flightIata: null, affectedOrigin: anyBooking?.origin ?? 'DEL' },
+    });
+    await this.publisher.publish(event);
+    return event;
+  }
 }
