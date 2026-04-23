@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 
-/* ── Icons ─────────────────────────────────────────────────────────────────── */
+/* Icons */
 const EyeIcon = ({ open }: { open: boolean }) =>
   open ? (
     <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" /><circle cx="12" cy="12" r="3" /></svg>
@@ -113,7 +113,7 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <p className="mt-5 text-center text-[11px]" style={{ color: 'rgba(34,56,67,0.30)' }}>Sessions expire after 24 hours · HTTPS only</p>
+        <p className="mt-5 text-center text-[11px]" style={{ color: 'rgba(34,56,67,0.30)' }}>Your account is kept safe with secure sign-in.</p>
       </div>
     </div>
   );

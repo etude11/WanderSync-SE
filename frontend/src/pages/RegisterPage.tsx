@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 
-/* ── Icons ─────────────────────────────────────────────────────────────────── */
+/* Icons */
 const EyeIcon = ({ open }: { open: boolean }) =>
   open ? (
     <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" /><circle cx="12" cy="12" r="3" /></svg>
@@ -30,7 +30,7 @@ const PlaneIcon = () => (
   <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5Z" /></svg>
 );
 
-/* ── Password strength ─────────────────────────────────────────────────────── */
+/* Password strength */
 function PasswordStrength({ password }: { password: string }) {
   const checks = [
     { label: '8+ chars',  pass: password.length >= 8 },
@@ -49,7 +49,7 @@ function PasswordStrength({ password }: { password: string }) {
   );
 }
 
-/* ── Register Page ─────────────────────────────────────────────────────────── */
+/* Register Page */
 export default function RegisterPage() {
   const { register } = useAuth();
   const [displayName, setDisplayName] = useState('');
@@ -148,7 +148,7 @@ export default function RegisterPage() {
 
           {/* Footer */}
           <div className="mt-5 pt-5 border-t border-dust-grey/50">
-            <p className="text-[11px] text-center leading-relaxed mb-3" style={{ color: 'rgba(34,56,67,0.35)' }}>Passwords are stored as bcrypt hashes · JWT sessions expire in 24h</p>
+            <p className="text-[11px] text-center leading-relaxed mb-3" style={{ color: 'rgba(34,56,67,0.35)' }}>Your account is protected with industry-standard security practices.</p>
             <p className="text-center text-xs" style={{ color: 'rgba(34,56,67,0.40)' }}>
               Already have an account?{' '}<Link to="/login" className="font-semibold transition-colors cursor-pointer" style={{ color: '#d77a61' }}>Sign in</Link>
             </p>
