@@ -12,11 +12,17 @@ const RefreshIcon = () => (
     <path d="M8 16H3v5" />
   </svg>
 );
+const BoltIcon = () => (
+  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8Z" />
+  </svg>
+);
 
 export default function DisruptionPage() {
   const [disruptions, setDisruptions] = useState<Disruption[]>([]);
   const [loading, setLoading]         = useState(true);
   const [refreshing, setRefreshing]   = useState(false);
+  const [simulating, setSimulating]   = useState(false);
 
   const load = async (showSpinner = false) => {
     if (showSpinner) setRefreshing(true);
@@ -46,14 +52,28 @@ export default function DisruptionPage() {
               : 'All systems clear'}
           </p>
         </div>
-        <button
-          onClick={() => load(true)}
-          disabled={refreshing}
-          className="btn-secondary text-sm flex items-center gap-2 cursor-pointer"
-        >
-          <span className={refreshing ? 'animate-spin' : ''}><RefreshIcon /></span>
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              setSimulating(true);
+              disruptionAPI.simulateDemo().then(() => load(true)).finally(() => setSimulating(false));
+            }}
+            disabled={simulating || refreshing}
+            className="btn-secondary text-sm flex items-center gap-2 cursor-pointer"
+            style={simulating ? {} : { color: '#d77a61', borderColor: 'rgba(215,122,97,0.35)' }}
+          >
+            <span className={simulating ? 'animate-pulse' : ''}><BoltIcon /></span>
+            {simulating ? 'Simulating…' : 'Simulate Disruption'}
+          </button>
+          <button
+            onClick={() => load(true)}
+            disabled={refreshing}
+            className="btn-secondary text-sm flex items-center gap-2 cursor-pointer"
+          >
+            <span className={refreshing ? 'animate-spin' : ''}><RefreshIcon /></span>
+            Refresh
+          </button>
+        </div>
       </div>
 
       <DisruptionList disruptions={disruptions} />
