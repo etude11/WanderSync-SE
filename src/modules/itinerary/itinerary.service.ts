@@ -19,9 +19,10 @@ export class ItineraryService {
     private readonly redis: RedisService,
   ) {}
 
-  async listAll(userId: string): Promise<Itinerary[]> {
+  async listAll(userId: string): Promise<(Itinerary & { bookings: BookingRecord[] })[]> {
     return this.prisma.itinerary.findMany({
       where: { userId },
+      include: { bookings: { orderBy: { departureTime: 'asc' } } },
       orderBy: { createdAt: 'desc' },
     });
   }
