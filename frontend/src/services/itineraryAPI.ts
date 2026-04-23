@@ -14,8 +14,9 @@ export const itineraryAPI = {
 
   remove: (id: string) => api.delete(`/itineraries/${id}`),
 
-  addBooking: (itineraryId: string, data: { providerKey: string; providerRef: string }) =>
-    api.post<Booking>(`/bookings`, { ...data, itineraryId }),
+  addBooking: (itineraryId: string, data: { providerKey: string; providerRef: string; type: string }) =>
+    api.post<Booking>(`/itineraries/${itineraryId}/bookings`, data),
 
-  removeBooking: (bookingId: string) => api.delete(`/bookings/${bookingId}`),
+  removeBooking: (itineraryId: string, bookingId: string) =>
+    api.delete(`/itineraries/${itineraryId}/bookings/${bookingId}`),
 };
