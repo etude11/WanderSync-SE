@@ -35,16 +35,16 @@ export class DisruptionController {
     return this.disruptionService.findAll(Number(page), Number(limit));
   }
 
+  @Post('simulate-demo')
+  @HttpCode(HttpStatus.CREATED)
+  simulateDemo(@CurrentUser() user: AuthenticatedUser) {
+    return this.disruptionService.simulateDemoDisruption(user.userId);
+  }
+
   @Post('simulate')
   @Roles(Role.ADMIN)
   @HttpCode(HttpStatus.CREATED)
   simulate(@Body() dto: SimulateDisruptionDto) {
     return this.disruptionService.simulateDisruption(dto);
-  }
-
-  @Post('simulate-demo')
-  @HttpCode(HttpStatus.CREATED)
-  simulateDemo(@CurrentUser() user: AuthenticatedUser) {
-    return this.disruptionService.simulateDemoDisruption(user.userId);
   }
 }
