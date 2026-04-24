@@ -6,7 +6,7 @@ interface AlternativeSuggestionsProps {
 
 // Stub suggestions — real logic would come from the backend disruption module
 function getSuggestions(disruption: Disruption): string[] {
-  if (disruption.severity === 'CRITICAL') {
+  if (disruption.severity >= 4) {
     return ['Contact airline for rebooking', 'Check travel insurance', 'Monitor real-time updates'];
   }
   return ['Check for alternative flights', 'Update hotel check-in accordingly'];

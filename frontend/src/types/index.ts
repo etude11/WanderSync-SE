@@ -46,17 +46,20 @@ export type DisruptionSeverityLabel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 export interface Disruption {
   id: string;
   type: string;
-  severity: number;
+  severity: number;           // 1–4 from backend
   description: string;
   flightIata: string | null;
   affectedOrigin: string | null;
+  status: 'ACTIVE' | 'RESOLVED';
+  resolvedAt: string | null;
+  isAcknowledged: boolean;
   publishedAt: string;
 }
 
 export function severityLabel(n: number): DisruptionSeverityLabel {
-  if (n <= 25) return 'LOW';
-  if (n <= 50) return 'MEDIUM';
-  if (n <= 75) return 'HIGH';
+  if (n === 1) return 'LOW';
+  if (n === 2) return 'MEDIUM';
+  if (n === 3) return 'HIGH';
   return 'CRITICAL';
 }
 

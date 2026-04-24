@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { BookingType, DisruptionEvent } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
@@ -6,6 +6,7 @@ import { RedisService } from '../../database/redis.service';
 import { DetectedDisruption, FlightTrackerAdapter } from './adapters/flight-tracker.adapter';
 import { WeatherAlertAdapter } from './adapters/weather-alert.adapter';
 import { DisruptionPublisherService } from './disruption-publisher.service';
+import { DisruptionSuggestionsService } from './suggestions/disruption-suggestions.service';
 import { SimulateDisruptionDto } from './dto/simulate-disruption.dto';
 
 @Injectable()
@@ -18,6 +19,7 @@ export class DisruptionService {
     private readonly flightAdapter: FlightTrackerAdapter,
     private readonly weatherAdapter: WeatherAlertAdapter,
     private readonly publisher: DisruptionPublisherService,
+    private readonly suggestionsService: DisruptionSuggestionsService,
   ) {}
 
   @Cron(CronExpression.EVERY_MINUTE)
@@ -49,10 +51,21 @@ export class DisruptionService {
 
     await Promise.allSettled(
       allDisruptions.map(async (d) => {
+        // Deduplicate weather events (24h TTL)
         if (d.affectedOrigin && !d.flightIata) {
           const key = `disruption-weather-seen:${d.affectedOrigin}:${d.description.toLowerCase().replace(/\s+/g, '-').slice(0, 50)}`;
           const result = await this.redis.client.set(key, '1', 'EX', 86400, 'NX');
           if (result === null) return;
+        }
+
+        // Deduplicate flight events (30-min TTL)
+        let dedupKey: string | null = null;
+        if (d.flightIata) {
+          dedupKey = `flight:${d.flightIata}:${d.type}`;
+          const flightDedupResult = await this.redis.client.set(
+            `disruption-flight-seen:${dedupKey}`, '1', 'EX', 1800, 'NX',
+          );
+          if (flightDedupResult === null) return;
         }
 
         const event = await this.prisma.disruptionEvent.create({
@@ -62,6 +75,7 @@ export class DisruptionService {
             description: d.description,
             flightIata: d.flightIata ?? null,
             affectedOrigin: d.affectedOrigin ?? null,
+            dedupKey,
           },
         });
 
@@ -80,6 +94,61 @@ export class DisruptionService {
         await this.publisher.publish(event);
       }),
     );
+
+    // Resolution pass — check if any ACTIVE events have cleared
+    const activeEvents = await this.prisma.disruptionEvent.findMany({
+      where: { status: 'ACTIVE' },
+    });
+
+    if (activeEvents.length > 0) {
+      const activeFlightIatas = activeEvents
+        .filter((e) => e.flightIata)
+        .map((e) => e.flightIata!);
+      const activeOrigins = activeEvents
+        .filter((e) => e.affectedOrigin && !e.flightIata)
+        .map((e) => e.affectedOrigin!);
+
+      const [reCheckedFlights, reCheckedWeather] = await Promise.allSettled([
+        activeFlightIatas.length > 0
+          ? this.flightAdapter.checkFlights(activeFlightIatas)
+          : Promise.resolve([]),
+        activeOrigins.length > 0
+          ? this.weatherAdapter.checkWeather(activeOrigins)
+          : Promise.resolve([]),
+      ]);
+
+      const stillActiveFlightIatas = new Set(
+        (reCheckedFlights.status === 'fulfilled' ? reCheckedFlights.value : [])
+          .filter((d) => d.flightIata)
+          .map((d) => d.flightIata!),
+      );
+      const stillActiveOrigins = new Set(
+        (reCheckedWeather.status === 'fulfilled' ? reCheckedWeather.value : [])
+          .filter((d) => d.affectedOrigin)
+          .map((d) => d.affectedOrigin!),
+      );
+
+      await Promise.allSettled(
+        activeEvents.map(async (event) => {
+          const isStillActive = event.flightIata
+            ? stillActiveFlightIatas.has(event.flightIata)
+            : event.affectedOrigin
+              ? stillActiveOrigins.has(event.affectedOrigin)
+              : false;
+
+          if (!isStillActive) {
+            const resolved = await this.prisma.disruptionEvent.update({
+              where: { id: event.id },
+              data: { status: 'RESOLVED', resolvedAt: new Date() },
+            });
+            if (event.dedupKey) {
+              await this.redis.client.del(`disruption-flight-seen:${event.dedupKey}`);
+            }
+            await this.publisher.publish(resolved);
+          }
+        }),
+      );
+    }
   }
 
   async simulateDemoDisruption(userId: string): Promise<DisruptionEvent> {
@@ -91,21 +160,27 @@ export class DisruptionService {
       ? await this.prisma.bookingRecord.findFirst({ where: { itinerary: { userId } } })
       : null;
 
+    const dedupKey = flight
+      ? `flight:${flight.providerRef}:FLIGHT_DELAY`
+      : `weather:${anyBooking?.origin ?? 'DEL'}:demo`;
+
     const event = await this.prisma.disruptionEvent.create({
       data: flight
         ? {
             type: 'FLIGHT_DELAY',
-            severity: 60,
+            severity: 2,
             description: `Delay detected for flight ${flight.providerRef}`,
             flightIata: flight.providerRef,
             affectedOrigin: null,
+            dedupKey,
           }
         : {
-            type: 'SEVERE_WEATHER',
-            severity: 45,
+            type: 'WEATHER_ALERT',
+            severity: 3,
             description: `Weather alert for ${anyBooking?.origin ?? 'DEL'}`,
             flightIata: null,
             affectedOrigin: anyBooking?.origin ?? 'DEL',
+            dedupKey,
           },
     });
     await this.publisher.publish(event);
@@ -126,7 +201,38 @@ export class DisruptionService {
     return event;
   }
 
-  async findMine(userId: string): Promise<DisruptionEvent[]> {
+  async acknowledge(eventId: string, userId: string): Promise<void> {
+    await this.prisma.disruptionAck.upsert({
+      where: { userId_eventId: { userId, eventId } },
+      create: { userId, eventId },
+      update: {},
+    });
+  }
+
+  async getSuggestions(eventId: string, userId: string): Promise<string[]> {
+    const cacheKey = `suggestions:${eventId}`;
+    const cached = await this.redis.client.get(cacheKey);
+    if (cached) return JSON.parse(cached) as string[];
+
+    const event = await this.prisma.disruptionEvent.findUnique({ where: { id: eventId } });
+    if (!event) throw new NotFoundException(`DisruptionEvent ${eventId} not found`);
+
+    const booking = event.flightIata
+      ? await this.prisma.bookingRecord.findFirst({
+          where: { providerRef: event.flightIata, itinerary: { userId } },
+        })
+      : event.affectedOrigin
+        ? await this.prisma.bookingRecord.findFirst({
+            where: { origin: event.affectedOrigin, itinerary: { userId } },
+          })
+        : null;
+
+    const suggestions = await this.suggestionsService.suggest({ event, booking });
+    await this.redis.client.set(cacheKey, JSON.stringify(suggestions), 'EX', 3600);
+    return suggestions;
+  }
+
+  async findMine(userId: string): Promise<(DisruptionEvent & { isAcknowledged: boolean })[]> {
     const bookings = await this.prisma.bookingRecord.findMany({
       where: { itinerary: { userId } },
       select: { providerRef: true, origin: true, type: true },
@@ -139,15 +245,21 @@ export class DisruptionService {
       .map((b) => b.providerRef);
     const origins = [...new Set(bookings.map((b) => b.origin))];
 
-    return this.prisma.disruptionEvent.findMany({
+    const events = await this.prisma.disruptionEvent.findMany({
       where: {
         OR: [
           { flightIata: { in: flightRefs } },
           { affectedOrigin: { in: origins } },
         ],
       },
+      include: { acks: { where: { userId }, select: { id: true } } },
       orderBy: { publishedAt: 'desc' },
     });
+
+    return events.map(({ acks, ...event }) => ({
+      ...event,
+      isAcknowledged: acks.length > 0,
+    }));
   }
 
   async findAll(page: number, limit: number): Promise<{ data: DisruptionEvent[]; total: number }> {
