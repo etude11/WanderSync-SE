@@ -27,6 +27,11 @@ enum DisruptionType {
   FLIGHT_DIVERSION
 }
 
+enum DisruptionStatus {
+  ACTIVE
+  RESOLVED
+}
+
 enum ConsentLevel {
   NONE
   PENDING
@@ -81,13 +86,28 @@ model BookingRecord {
 }
 
 model DisruptionEvent {
-  id             String         @id @default(uuid())
+  id             String           @id @default(uuid())
   type           DisruptionType
   severity       Int
   description    String
   flightIata     String?
   affectedOrigin String?
-  publishedAt    DateTime       @default(now())
+  status         DisruptionStatus @default(ACTIVE)
+  resolvedAt     DateTime?
+  dedupKey       String?
+  publishedAt    DateTime         @default(now())
+  acks           DisruptionAck[]
+}
+
+model DisruptionAck {
+  id      String          @id @default(uuid())
+  userId  String
+  eventId String
+  ackedAt DateTime        @default(now())
+  event   DisruptionEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, eventId])
+  @@index([userId])
 }
 
 model ConsentState {
