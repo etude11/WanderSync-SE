@@ -27,7 +27,7 @@ const mockBooking = {
 describe('BookingService', () => {
   let service: BookingService;
   let prisma: jest.Mocked<Pick<PrismaService, 'itinerary' | 'bookingRecord'>>;
-  let redis: { client: { get: jest.Mock; set: jest.Mock } };
+  let redis: { client: { get: jest.Mock; set: jest.Mock; del: jest.Mock } };
   let registry: ProviderRegistryService;
   let strategy: jest.Mocked<IBookingStrategy>;
 
@@ -50,12 +50,17 @@ describe('BookingService', () => {
       } as never,
     };
 
-    redis = { client: { get: jest.fn(), set: jest.fn() } };
+    redis = { client: { get: jest.fn(), set: jest.fn(), del: jest.fn() } };
+
+    const hotelStrategy = { search: jest.fn().mockReturnValue([]) } as never;
+    const transportStrategy = { searchRoutes: jest.fn().mockReturnValue([]) } as never;
 
     service = new BookingService(
       registry,
       prisma as unknown as PrismaService,
       redis as unknown as RedisService,
+      hotelStrategy,
+      transportStrategy,
     );
 
     jest.clearAllMocks();

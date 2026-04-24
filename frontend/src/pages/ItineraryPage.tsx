@@ -57,10 +57,16 @@ export default function ItineraryPage() {
 
   const handleRemoveBooking = async (bookingId: string) => {
     if (!selected) return;
-    const updated = { ...selected, bookings: (selected.bookings ?? []).filter((b) => b.id !== bookingId) };
+    const previousBookings = selected.bookings ?? [];
+    const updated = { ...selected, bookings: previousBookings.filter((b) => b.id !== bookingId) };
     setSelected(updated);
     setItineraries((prev) => prev.map((it) => it.id === selected.id ? updated : it));
-    await itineraryAPI.removeBooking(selected.id, bookingId);
+    try {
+      await itineraryAPI.removeBooking(selected.id, bookingId);
+    } catch {
+      setSelected((prev) => prev ? { ...prev, bookings: previousBookings } : prev);
+      setItineraries((prev) => prev.map((it) => it.id === selected.id ? { ...it, bookings: previousBookings } : it));
+    }
   };
 
   const handleDelete = async (id: string) => {

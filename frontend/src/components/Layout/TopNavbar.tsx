@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { useDisruptionStore } from '@/store/disruptionStore';
 
 /* Icons */
 const BellIcon = () => (
@@ -24,7 +25,9 @@ const LogOutIcon = () => (
 
 export default function TopNavbar() {
   const { user, logout } = useAuth();
-  const displayName = user?.name ?? user?.email?.split('@')[0] ?? 'Traveller';
+  const displayName = user?.displayName ?? user?.email?.split('@')[0] ?? 'Traveller';
+  const disruptions = useDisruptionStore(s => s.disruptions);
+  const unackedCount = disruptions.filter(d => d.status === 'ACTIVE' && !d.isAcknowledged).length;
 
   return (
     <header className="h-14 flex items-center justify-between px-6 border-b border-dust-grey/50 bg-platinum/95 sticky top-0 z-30" style={{ backdropFilter: 'blur(8px)' }}>
@@ -34,11 +37,14 @@ export default function TopNavbar() {
 
       <div className="flex items-center gap-1">
         <Link
-          to="/notifications"
-          className="p-2 rounded-lg text-charcoal/50 hover:text-charcoal hover:bg-dust-grey/30 transition-colors duration-150 cursor-pointer"
-          title="Notifications"
+          to="/disruptions"
+          className="relative p-2 rounded-lg text-charcoal/50 hover:text-charcoal hover:bg-dust-grey/30 transition-colors duration-150 cursor-pointer"
+          title="Disruptions"
         >
           <BellIcon />
+          {unackedCount > 0 && (
+            <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-[#c96248] rounded-full border-2 border-platinum"></span>
+          )}
         </Link>
 
         <div className="flex items-center gap-2 ml-2 pl-3 border-l border-dust-grey/50">

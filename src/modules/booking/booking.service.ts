@@ -3,11 +3,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { BookingRecord, Prisma } from '@prisma/client';
+import { BookingRecord, BookingType, Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { RedisService } from '../../database/redis.service';
 import { ProviderRegistryService } from './provider-registry.service';
 import { NormalizedBooking } from './strategies/booking-strategy.interface';
+import { HotelBookingStrategy, HotelResult } from './strategies/hotel-booking.strategy';
+import { TransportBookingStrategy, TransportRoute } from './strategies/transport-booking.strategy';
 
 @Injectable()
 export class BookingService {
@@ -15,6 +17,8 @@ export class BookingService {
     private readonly registry: ProviderRegistryService,
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
+    private readonly hotelStrategy: HotelBookingStrategy,
+    private readonly transportStrategy: TransportBookingStrategy,
   ) {}
 
   async aggregate(itineraryId: string, userId: string): Promise<BookingRecord[]> {
@@ -93,7 +97,28 @@ export class BookingService {
   }
 
   async remove(bookingId: string, userId: string): Promise<void> {
-    await this.findOne(bookingId, userId);
+    const booking = await this.findOne(bookingId, userId);
     await this.prisma.bookingRecord.delete({ where: { id: bookingId } });
+    await this.redis.client.del(`itinerary:${booking.itineraryId}`);
+  }
+
+  async lookupFlight(ref: string): Promise<NormalizedBooking> {
+    const strategy = this.registry.getAll().find((s) => s.bookingType === BookingType.FLIGHT);
+    if (!strategy) throw new NotFoundException('Flight provider not configured');
+    const results = await strategy.fetchAndNormalize([ref.toUpperCase()]);
+    if (results.length === 0) throw new NotFoundException(`Flight ${ref} not found`);
+    return results[0];
+  }
+
+  lookupHotel(city: string, checkIn: string, checkOut: string): HotelResult[] {
+    return this.hotelStrategy.search(city.toUpperCase(), checkIn, checkOut);
+  }
+
+  lookupTransport(type: string, origin: string, destination: string): TransportRoute[] {
+    return this.transportStrategy.searchRoutes(
+      type.toUpperCase(),
+      origin.toUpperCase(),
+      destination.toUpperCase(),
+    );
   }
 }

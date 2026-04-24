@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { disruptionAPI } from '@/services/disruptionAPI';
-import type { Disruption } from '@/types';
 import DisruptionList from '@/components/Disruption/DisruptionList';
 import LoadingSpinner from '@/components/Shared/LoadingSpinner';
+import { useDisruptionStore } from '@/store/disruptionStore';
+import { useDisruptionStream } from '@/hooks/useDisruptionStream';
 
 const RefreshIcon = () => (
   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -19,10 +20,13 @@ const BoltIcon = () => (
 );
 
 export default function DisruptionPage() {
-  const [disruptions, setDisruptions] = useState<Disruption[]>([]);
+  const disruptions = useDisruptionStore(s => s.disruptions);
+  const setDisruptions = useDisruptionStore(s => s.setDisruptions);
   const [loading, setLoading]         = useState(true);
   const [refreshing, setRefreshing]   = useState(false);
   const [simulating, setSimulating]   = useState(false);
+
+  useDisruptionStream();
 
   const load = async (showSpinner = false) => {
     if (showSpinner) setRefreshing(true);

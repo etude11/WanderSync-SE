@@ -1,0 +1,28 @@
+import { useState, useEffect } from 'react';
+import { disruptionAPI } from '@/services/disruptionAPI';
+import LoadingSpinner from '../Shared/LoadingSpinner';
+
+export default function SuggestionsPanel({ eventId }: { eventId: string }) {
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    disruptionAPI.suggestions(eventId)
+      .then(res => setSuggestions(res.data))
+      .catch(err => console.error(err))
+      .finally(() => setLoading(false));
+  }, [eventId]);
+
+  if (loading) return <LoadingSpinner size="sm" className="h-12" />;
+
+  return (
+    <div className="mt-3 bg-white/80 rounded-lg p-3 text-sm">
+      <p className="font-semibold text-charcoal mb-2">Recommended Actions:</p>
+      <ul className="list-disc pl-5 space-y-1 text-charcoal/80">
+        {suggestions.map((sug, i) => (
+          <li key={i}>{sug}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}

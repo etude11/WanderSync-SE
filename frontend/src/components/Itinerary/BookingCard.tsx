@@ -1,4 +1,6 @@
 import type { Booking, BookingType } from '@/types';
+import { useDisruptionStore } from '@/store/disruptionStore';
+import AlertBanner from '@/components/Disruption/AlertBanner';
 
 const PlaneIcon = () => (
   <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -43,15 +45,21 @@ interface BookingCardProps {
 
 export default function BookingCard({ booking, onRemove }: BookingCardProps) {
   const meta = TYPE_META[booking.type] ?? TYPE_META.FLIGHT;
+  const disruptions = useDisruptionStore(s => s.disruptions);
+  const activeDisruptions = disruptions.filter(d => 
+    d.status === 'ACTIVE' && !d.isAcknowledged &&
+    (d.flightIata === booking.providerRef || d.affectedOrigin === booking.origin)
+  );
 
   return (
-    <div
-      className={`relative rounded-xl px-4 py-3 border transition-all duration-200 ${
-        booking.disrupted
-          ? 'border-burnt-peach/30 bg-burnt-peach/5'
-          : 'border-dust-grey/60 bg-white hover:border-dust-grey hover:shadow-soft'
-      }`}
-    >
+    <div className="flex flex-col gap-2">
+      <div
+        className={`relative rounded-xl px-4 py-3 border transition-all duration-200 ${
+          booking.disrupted
+            ? 'border-burnt-peach/30 bg-burnt-peach/5'
+            : 'border-dust-grey/60 bg-white hover:border-dust-grey hover:shadow-soft'
+        }`}
+      >
       {booking.disrupted && (
         <span className="absolute top-2.5 right-3 flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(215,122,97,0.12)', color: '#d77a61', border: '1px solid rgba(215,122,97,0.25)' }}>
           <BoltIcon /> Disrupted
@@ -81,6 +89,11 @@ export default function BookingCard({ booking, onRemove }: BookingCardProps) {
           </button>
         )}
       </div>
+      </div>
+      
+      {booking.disrupted && activeDisruptions.length > 0 && (
+        <AlertBanner disruptions={activeDisruptions} />
+      )}
     </div>
   );
 }

@@ -5,6 +5,12 @@ import { WeatherAlertAdapter } from './adapters/weather-alert.adapter';
 import { DisruptionPublisherService } from './disruption-publisher.service';
 import { DisruptionService } from './disruption.service';
 import { DisruptionController } from './disruption.controller';
+import { DisruptionSuggestionsService } from './suggestions/disruption-suggestions.service';
+import { RuleBasedHandler } from './suggestions/handlers/rule-based.handler';
+import { LLMHandler } from './suggestions/handlers/llm.handler';
+import { FallbackHandler } from './suggestions/handlers/fallback.handler';
+import { DisruptionEventBus } from './disruption-event-bus.service';
+import { DisruptionStreamService } from './disruption-stream.service';
 
 @Module({
   imports: [ConfigModule],
@@ -22,6 +28,12 @@ import { DisruptionController } from './disruption.controller';
     },
     DisruptionPublisherService,
     DisruptionService,
+    DisruptionEventBus,
+    DisruptionStreamService,
+    RuleBasedHandler,
+    LLMHandler,
+    FallbackHandler,
+    DisruptionSuggestionsService,
   ],
   exports: [DisruptionService],
 })
