@@ -45,12 +45,14 @@ describe('DisruptionService — NFR2: simulate test harness', () => {
       disruptionEvent: { create: createMock, findMany: jest.fn(), count: jest.fn() },
     } as unknown as PrismaService;
 
-    const redis = { client: { get: jest.fn(), set: jest.fn(), xadd: jest.fn() } } as unknown as RedisService;
+    const redis = { client: { get: jest.fn(), set: jest.fn() } } as unknown as RedisService;
     const flightAdapter = { checkFlights: jest.fn().mockResolvedValue([]) } as unknown as FlightTrackerAdapter;
     const weatherAdapter = { checkWeather: jest.fn().mockResolvedValue([]) } as unknown as WeatherAlertAdapter;
     const publisher = { publish: publishMock } as unknown as DisruptionPublisherService;
+    const suggestionsService = { getSuggestions: jest.fn().mockResolvedValue([]) } as never;
+    const streamService = { pushDirectlyToUser: jest.fn() } as never;
 
-    service = new DisruptionService(prisma, redis, flightAdapter, weatherAdapter, publisher);
+    service = new DisruptionService(prisma, redis, flightAdapter, weatherAdapter, publisher, suggestionsService, streamService);
   });
 
   it('NFR2: all 20 simulate calls produce a DisruptionEvent and publish to stream', async () => {

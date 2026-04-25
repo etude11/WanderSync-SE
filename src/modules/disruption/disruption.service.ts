@@ -7,6 +7,7 @@ import { DetectedDisruption, FlightTrackerAdapter } from './adapters/flight-trac
 import { WeatherAlertAdapter } from './adapters/weather-alert.adapter';
 import { DisruptionPublisherService } from './disruption-publisher.service';
 import { DisruptionSuggestionsService } from './suggestions/disruption-suggestions.service';
+import { DisruptionStreamService } from './disruption-stream.service';
 import { SimulateDisruptionDto } from './dto/simulate-disruption.dto';
 
 @Injectable()
@@ -20,6 +21,7 @@ export class DisruptionService {
     private readonly weatherAdapter: WeatherAlertAdapter,
     private readonly publisher: DisruptionPublisherService,
     private readonly suggestionsService: DisruptionSuggestionsService,
+    private readonly streamService: DisruptionStreamService,
   ) {}
 
   @Cron(CronExpression.EVERY_MINUTE)
@@ -51,14 +53,25 @@ export class DisruptionService {
 
     await Promise.allSettled(
       allDisruptions.map(async (d) => {
-        // Deduplicate weather events (24h TTL)
+        const twoHoursAgo = new Date(Date.now() - 2 * 3600 * 1000);
+
+        // Deduplicate weather events (24h TTL + DB guard with 2h grace on resolved)
         if (d.affectedOrigin && !d.flightIata) {
           const key = `disruption-weather-seen:${d.affectedOrigin}:${d.description.toLowerCase().replace(/\s+/g, '-').slice(0, 50)}`;
           const result = await this.redis.client.set(key, '1', 'EX', 86400, 'NX');
           if (result === null) return;
+          // DB guard — blocks duplicates for ACTIVE or recently-RESOLVED events (2h grace)
+          const recentWeather = await this.prisma.disruptionEvent.findFirst({
+            where: {
+              affectedOrigin: d.affectedOrigin,
+              type: d.type,
+              OR: [{ status: 'ACTIVE' }, { resolvedAt: { gt: twoHoursAgo } }],
+            },
+          });
+          if (recentWeather) return;
         }
 
-        // Deduplicate flight events (30-min TTL)
+        // Deduplicate flight events (30-min TTL + DB guard with 2h grace on resolved)
         let dedupKey: string | null = null;
         if (d.flightIata) {
           dedupKey = `flight:${d.flightIata}:${d.type}`;
@@ -66,6 +79,29 @@ export class DisruptionService {
             `disruption-flight-seen:${dedupKey}`, '1', 'EX', 1800, 'NX',
           );
           if (flightDedupResult === null) return;
+          // DB guard — blocks duplicates for ACTIVE or recently-RESOLVED events (2h grace)
+          const recentFlight = await this.prisma.disruptionEvent.findFirst({
+            where: { dedupKey, OR: [{ status: 'ACTIVE' }, { resolvedAt: { gt: twoHoursAgo } }] },
+          });
+          if (recentFlight) return;
+
+          // CANCELLATION supersedes an existing ACTIVE DELAY for the same flight
+          if (d.type === 'FLIGHT_CANCELLATION') {
+            const activeDelay = await this.prisma.disruptionEvent.findFirst({
+              where: { flightIata: d.flightIata, type: 'FLIGHT_DELAY', status: 'ACTIVE' },
+            });
+            if (activeDelay) {
+              const resolved = await this.prisma.disruptionEvent.update({
+                where: { id: activeDelay.id },
+                data: { status: 'RESOLVED', resolvedAt: new Date() },
+              });
+              if (activeDelay.dedupKey) {
+                // Grace TTL so the delay doesn't resurface immediately
+                await this.redis.client.set(`disruption-flight-seen:${activeDelay.dedupKey}`, '1', 'EX', 7200);
+              }
+              await this.publisher.publish(resolved);
+            }
+          }
         }
 
         const event = await this.prisma.disruptionEvent.create({
@@ -142,7 +178,8 @@ export class DisruptionService {
               data: { status: 'RESOLVED', resolvedAt: new Date() },
             });
             if (event.dedupKey) {
-              await this.redis.client.del(`disruption-flight-seen:${event.dedupKey}`);
+              // Keep key alive with 2h grace so the cron doesn't immediately recreate the event
+              await this.redis.client.set(`disruption-flight-seen:${event.dedupKey}`, '1', 'EX', 7200);
             }
             await this.publisher.publish(resolved);
           }
@@ -161,15 +198,28 @@ export class DisruptionService {
       : null;
 
     const dedupKey = flight
-      ? `flight:${flight.providerRef}:FLIGHT_DELAY`
+      ? `flight:${flight.providerRef}:FLIGHT_CANCELLATION`
       : `weather:${anyBooking?.origin ?? 'DEL'}:demo`;
+
+    // Reuse ACTIVE or recently-RESOLVED (2h) event — prevents duplicates on repeated clicks
+    const twoHoursAgo = new Date(Date.now() - 2 * 3600 * 1000);
+    const existing = await this.prisma.disruptionEvent.findFirst({
+      where: { dedupKey, OR: [{ status: 'ACTIVE' }, { resolvedAt: { gt: twoHoursAgo } }] },
+    });
+    if (existing) {
+      // Only re-push ACTIVE events; don't resurface a resolved disruption over SSE
+      if (existing.status === 'ACTIVE') {
+        this.streamService.pushDirectlyToUser(userId, existing);
+      }
+      return existing;
+    }
 
     const event = await this.prisma.disruptionEvent.create({
       data: flight
         ? {
-            type: 'FLIGHT_DELAY',
-            severity: 2,
-            description: `Delay detected for flight ${flight.providerRef}`,
+            type: 'FLIGHT_CANCELLATION',
+            severity: 4,
+            description: `Flight ${flight.providerRef} has been cancelled. Please rebook on an alternative flight.`,
             flightIata: flight.providerRef,
             affectedOrigin: null,
             dedupKey,
@@ -184,6 +234,7 @@ export class DisruptionService {
           },
     });
     await this.publisher.publish(event);
+    this.streamService.pushDirectlyToUser(userId, event);
     return event;
   }
 
@@ -247,6 +298,7 @@ export class DisruptionService {
 
     const events = await this.prisma.disruptionEvent.findMany({
       where: {
+        status: 'ACTIVE',
         OR: [
           { flightIata: { in: flightRefs } },
           { affectedOrigin: { in: origins } },

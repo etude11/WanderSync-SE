@@ -26,7 +26,7 @@ const mockDisruptionEvent = {
 describe('DisruptionService', () => {
   let service: DisruptionService;
   let prisma: jest.Mocked<Pick<PrismaService, 'bookingRecord' | 'disruptionEvent'>>;
-  let redis: { client: { get: jest.Mock; set: jest.Mock; xadd: jest.Mock } };
+  let redis: { client: { get: jest.Mock; set: jest.Mock } };
   let flightAdapter: jest.Mocked<FlightTrackerAdapter>;
   let weatherAdapter: jest.Mocked<WeatherAlertAdapter>;
   let publisher: jest.Mocked<DisruptionPublisherService>;
@@ -44,11 +44,13 @@ describe('DisruptionService', () => {
       } as never,
     };
 
-    redis = { client: { get: jest.fn(), set: jest.fn().mockResolvedValue('OK'), xadd: jest.fn() } };
+    redis = { client: { get: jest.fn(), set: jest.fn().mockResolvedValue('OK') } };
 
     flightAdapter = { checkFlights: jest.fn() } as never;
     weatherAdapter = { checkWeather: jest.fn() } as never;
     publisher = { publish: jest.fn() } as never;
+    const suggestionsService = { getSuggestions: jest.fn().mockResolvedValue([]) } as never;
+    const streamService = { pushDirectlyToUser: jest.fn() } as never;
 
     service = new DisruptionService(
       prisma as unknown as PrismaService,
@@ -56,6 +58,8 @@ describe('DisruptionService', () => {
       flightAdapter,
       weatherAdapter,
       publisher,
+      suggestionsService,
+      streamService,
     );
 
     jest.clearAllMocks();

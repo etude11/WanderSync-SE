@@ -23,14 +23,17 @@ export type DetectedDisruption = {
 export class FlightTrackerAdapter {
   private readonly logger = new Logger(FlightTrackerAdapter.name);
   private readonly apiKey: string;
+  private readonly base: string;
   private readonly breaker: CircuitBreaker<[string], AviationStackFlight | null>;
-  private static readonly BASE = 'http://api.aviationstack.com/v1/flights';
 
   constructor(apiKeyOrConfig: string | ConfigService) {
-    this.apiKey =
-      typeof apiKeyOrConfig === 'string'
-        ? apiKeyOrConfig
-        : (apiKeyOrConfig.get<string>('aviationstack.apiKey') ?? '');
+    if (typeof apiKeyOrConfig === 'string') {
+      this.apiKey = apiKeyOrConfig;
+      this.base = 'http://api.aviationstack.com/v1/flights';
+    } else {
+      this.apiKey = apiKeyOrConfig.get<string>('aviationstack.apiKey') ?? '';
+      this.base = apiKeyOrConfig.get<string>('aviationstack.baseUrl') ?? 'http://api.aviationstack.com/v1/flights';
+    }
 
     this.breaker = new CircuitBreaker(this.doFetch.bind(this), {
       timeout: 5000,
@@ -90,7 +93,7 @@ export class FlightTrackerAdapter {
 
   private async doFetch(iata: string): Promise<AviationStackFlight | null> {
     const { data } = await axios.get<{ data: AviationStackFlight[] }>(
-      FlightTrackerAdapter.BASE,
+      this.base,
       { params: { access_key: this.apiKey, flight_iata: iata }, timeout: 5000 },
     );
     return data.data?.[0] ?? null;

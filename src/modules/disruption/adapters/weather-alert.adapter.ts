@@ -23,14 +23,17 @@ type OWMResponse = {
 export class WeatherAlertAdapter {
   private readonly logger = new Logger(WeatherAlertAdapter.name);
   private readonly apiKey: string;
+  private readonly base: string;
   private readonly breaker: CircuitBreaker<[number, number], OWMResponse | null>;
-  private static readonly BASE = 'https://api.openweathermap.org/data/3.0/onecall';
 
   constructor(apiKeyOrConfig: string | ConfigService) {
-    this.apiKey =
-      typeof apiKeyOrConfig === 'string'
-        ? apiKeyOrConfig
-        : (apiKeyOrConfig.get<string>('openweathermap.apiKey') ?? '');
+    if (typeof apiKeyOrConfig === 'string') {
+      this.apiKey = apiKeyOrConfig;
+      this.base = 'https://api.openweathermap.org/data/3.0/onecall';
+    } else {
+      this.apiKey = apiKeyOrConfig.get<string>('openweathermap.apiKey') ?? '';
+      this.base = apiKeyOrConfig.get<string>('openweathermap.baseUrl') ?? 'https://api.openweathermap.org/data/3.0/onecall';
+    }
 
     this.breaker = new CircuitBreaker(this.doFetch.bind(this), {
       timeout: 5000,
@@ -66,7 +69,7 @@ export class WeatherAlertAdapter {
             disruptions.push({
               type: DisruptionType.WEATHER_ALERT,
               severity,
-              description: alert.event,
+              description: `${alert.event} at ${origin}`,
               affectedOrigin: origin,
             });
           }
@@ -78,7 +81,7 @@ export class WeatherAlertAdapter {
   }
 
   private async doFetch(lat: number, lon: number): Promise<OWMResponse | null> {
-    const { data } = await axios.get<OWMResponse>(WeatherAlertAdapter.BASE, {
+    const { data } = await axios.get<OWMResponse>(this.base, {
       params: {
         lat,
         lon,

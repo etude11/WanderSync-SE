@@ -11,10 +11,10 @@ export class DisruptionSuggestionsService {
     private readonly llm: LLMHandler,
     private readonly fallback: FallbackHandler,
   ) {
-    this.ruleBased.setNext(this.llm).setNext(this.fallback);
+    this.llm.setNext(this.ruleBased).setNext(this.fallback);
   }
 
   async suggest(ctx: SuggestionContext): Promise<string[]> {
-    return this.ruleBased.handle(ctx);
+    return this.llm.handle(ctx);
   }
 }
