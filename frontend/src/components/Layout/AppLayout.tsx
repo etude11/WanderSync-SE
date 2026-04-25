@@ -1,8 +1,11 @@
 import { Outlet } from 'react-router-dom';
 import TopNavbar from './TopNavbar';
 import SideNavigation from './SideNavigation';
+import { useDisruptionStream } from '@/hooks/useDisruptionStream';
 
 export default function AppLayout() {
+  useDisruptionStream(); // keep SSE alive across all protected routes
+
   return (
     <div className="min-h-screen flex flex-col bg-platinum">
       <TopNavbar />

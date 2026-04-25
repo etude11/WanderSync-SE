@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { itineraryAPI } from '@/services/itineraryAPI';
+import { disruptionAPI } from '@/services/disruptionAPI';
+import { useDisruptionStore } from '@/store/disruptionStore';
 import type { Itinerary, Booking, BookingType } from '@/types';
 import TimelineView from '@/components/Itinerary/TimelineView';
 import AddBookingModal from '@/components/Itinerary/AddBookingModal';
@@ -20,6 +22,7 @@ const TrashIcon = () => (
 
 
 export default function ItineraryPage() {
+  const setDisruptions = useDisruptionStore(s => s.setDisruptions);
   const [itineraries, setItineraries] = useState<Itinerary[]>([]);
   const [selected, setSelected]       = useState<Itinerary | null>(null);
   const [showModal, setShowModal]     = useState(false);
@@ -27,11 +30,18 @@ export default function ItineraryPage() {
   const [newTitle, setNewTitle]       = useState('');
   const [creating, setCreating]       = useState(false);
   const [loading, setLoading]         = useState(true);
+  const [summary, setSummary]         = useState<string | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryItineraryId, setSummaryItineraryId] = useState<string | null>(null);
 
   const load = () =>
     itineraryAPI.list().then((r) => {
       setItineraries(r.data);
-      setSelected((prev) => r.data.find((i) => i.id === prev?.id) ?? r.data[0] ?? null);
+      setSelected((prev) => {
+        const next = r.data.find((i) => i.id === prev?.id) ?? r.data[0] ?? null;
+        if (next?.id !== prev?.id) { setSummary(null); setSummaryItineraryId(null); }
+        return next;
+      });
     });
 
   useEffect(() => { load().finally(() => setLoading(false)); }, []);
@@ -75,6 +85,10 @@ export default function ItineraryPage() {
     setItineraries(remaining);
     setSelected((prev) => prev?.id === id ? (remaining[0] ?? null) : prev);
     await itineraryAPI.remove(id);
+    // Refresh disruptions — deleted bookings may have stale alerts in the store
+    disruptionAPI.mine()
+      .then(r => setDisruptions(r.data))
+      .catch(() => setDisruptions([]));
   };
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -88,6 +102,24 @@ export default function ItineraryPage() {
       await load();
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleSummarize = async () => {
+    if (!selected) return;
+    if (summaryItineraryId === selected.id && summary) {
+      setSummary(null);
+      setSummaryItineraryId(null);
+      return;
+    }
+    setSummaryLoading(true);
+    setSummary(null);
+    try {
+      const r = await itineraryAPI.summarize(selected.id);
+      setSummary(r.data.summary);
+      setSummaryItineraryId(selected.id);
+    } finally {
+      setSummaryLoading(false);
     }
   };
 
@@ -144,7 +176,7 @@ export default function ItineraryPage() {
                     ? 'border-burnt-peach/30 bg-burnt-peach/6'
                     : 'border-dust-grey/60 bg-white hover:border-dust-grey hover:shadow-soft'
                 }`}
-                onClick={() => setSelected(it)}
+                onClick={() => { setSelected(it); setSummary(null); setSummaryItineraryId(null); }}
               >
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-semibold text-charcoal truncate">{it.title}</span>
@@ -174,13 +206,28 @@ export default function ItineraryPage() {
                     {selected.title}
                     <span className="text-xs font-sans font-normal text-charcoal/35">· Timeline</span>
                   </h2>
-                  <button
-                    onClick={() => setShowModal(true)}
-                    className="btn-primary text-xs px-3 py-1.5 flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <PlusIcon /> Add Booking
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleSummarize}
+                      disabled={summaryLoading}
+                      className="btn-secondary text-xs px-3 py-1.5 cursor-pointer"
+                    >
+                      {summaryLoading ? 'Summarizing…' : summaryItineraryId === selected.id && summary ? 'Hide Summary' : 'Summarize'}
+                    </button>
+                    <button
+                      onClick={() => setShowModal(true)}
+                      className="btn-primary text-xs px-3 py-1.5 flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <PlusIcon /> Add Booking
+                    </button>
+                  </div>
                 </div>
+                {summary && summaryItineraryId === selected.id && (
+                  <div className="mb-5 rounded-xl border border-dust-grey/50 bg-sand-beige/30 px-4 py-3 animate-fade-in">
+                    <p className="text-xs font-semibold text-charcoal/50 uppercase tracking-wider mb-1">AI Trip Summary</p>
+                    <p className="text-sm text-charcoal/80 leading-relaxed">{summary}</p>
+                  </div>
+                )}
                 <TimelineView bookings={selected.bookings ?? []} onRemoveBooking={handleRemoveBooking} />
               </div>
             ) : null}
