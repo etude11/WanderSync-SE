@@ -23,8 +23,6 @@
 
 \definecolor{accent}{RGB}{30,80,160}
 \definecolor{lightblue}{RGB}{235,245,255}
-\definecolor{lightgray}{RGB}{245,245,245}
-\definecolor{darkgray}{RGB}{80,80,80}
 \definecolor{successgreen}{RGB}{39,174,96}
 \definecolor{warningorange}{RGB}{211,84,0}
 
@@ -41,14 +39,13 @@
 \rfoot{\thepage}
 \renewcommand{\headrulewidth}{0.4pt}
 
-\newcommand{\metric}[2]{\noindent\textbf{#1:}\hspace{0.5em}#2\par\vspace{0.3em}}
 \newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
 \newcolumntype{C}[1]{>{\centering\arraybackslash}p{#1}}
 
 \begin{document}
 
 \begin{center}
-  {\LARGE\bfseries Task 4: Prototype Implementation and Architecture Analysis}\\[0.4em]
+  {\LARGE\bfseries Task 4: Architecture Analysis}\\[0.4em]
   {\large WanderSync: Dynamic Itinerary, Disruption Management and Social Travel Hub}\\[0.2em]
   {\normalsize Team 15}
 \end{center}
@@ -56,233 +53,133 @@
 \vspace{1em}
 
 % ================================================================
-\section{Prototype Overview}
+\section{The Architecture We Built}
 % ================================================================
 
-WanderSync is implemented as a full-stack web application with a NestJS backend (Node.js,
-TypeScript, Prisma ORM, PostgreSQL, Redis) and a React 19 frontend (Vite, TypeScript, Tailwind,
-Zustand). The prototype delivers the core end-to-end functionality promised in the proposal:
-unified booking aggregation, real-time disruption detection with personalised suggestions, and a
-notification delivery log. The social subsystem is scaffolded at the data-model and consent-state
-level; the UI surface is deferred post-prototype.
+WanderSync is deployed as a single NestJS process — a \textbf{modular monolith} — with six
+clearly bounded modules (Auth, Booking, Itinerary, Disruption, Notification, Social), each
+responsible for its own domain logic and database models. What sets it apart from a plain CRUD
+monolith is the \textbf{event-driven path} that handles disruption detection and delivery: rather
+than waiting for the client to ask ``anything new?'', the system pushes alerts to connected users
+the moment a disruption is detected.
 
-\subsection{Implemented Subsystems}
-
-\begin{tabularx}{\textwidth}{@{}lX@{}}
-\toprule
-\textbf{Subsystem} & \textbf{Implementation summary} \\
-\midrule
-Auth & JWT (bcrypt hash, 24h expiry), Role guard (TRAVELLER / ADMIN), rate-limit middleware \\
-Booking Aggregator & Adapter-pattern provider strategies; AviationStack flight adapter wired \\
-Itinerary Management & Full CRUD with eager-loaded BookingRecord; chronological timeline \\
-Disruption Engine & CRON poller (60 s), FlightTracker + WeatherAlert adapters, dual-layer Redis+DB deduplication, CoR suggestion pipeline (rule-based → LLM → fallback), SSE push \\
-Notification & Redis Streams consumer group (5 s poll), NotificationLog persistence \\
-Social & Data model (ConsentState), stubs only \\
-\bottomrule
-\end{tabularx}
-
-% ================================================================
-\section{Implemented Architecture}
-% ================================================================
-
-\subsection{Architectural Style: Event-Driven Modular Monolith}
-
-WanderSync implements a \textbf{modular monolith} at the deployment level — a single NestJS
-process — with \textbf{event-driven communication} for the real-time disruption path. This choice
-was motivated by three factors:
-
-\begin{itemize}[leftmargin=1.5em]
-  \item \textbf{Team size and timeline.} A microservices split would introduce distributed-systems
-    overhead (service discovery, network retries, schema contracts) that a four-person university
-    team cannot absorb without sacrificing feature depth.
-  \item \textbf{Clear module boundaries.} NestJS module encapsulation enforces separation of
-    concerns at compile time while remaining a single deployable artefact.
-  \item \textbf{Real-time NFR.} The disruption notification NFR demands sub-second delivery
-    once an event is detected. An in-process EventBus with Server-Sent Events (SSE) achieves
-    this without introducing an external message broker.
-\end{itemize}
-
-\subsection{High-Level Architecture Diagram}
+The disruption pipeline works in four stages. A background CRON scheduler fires every minute and
+calls two external APIs — AviationStack for live flight status and OpenWeatherMap for weather
+alerts — concurrently. Newly detected events pass through a deduplication guard (Redis cache +
+database check) to prevent the same disruption from being reported twice. Confirmed new events
+are written to PostgreSQL and immediately broadcast to every connected browser tab via
+\textbf{Server-Sent Events (SSE)}, a lightweight HTTP streaming protocol that keeps a persistent
+connection open from browser to server. Alongside the alert, a Chain of Responsibility suggestion
+pipeline generates contextualised advice — first from deterministic rules, falling back to the
+Gemini LLM for complex cases, and finally to generic guidance if both fail.
 
 \begin{figure}[H]
   \centering
   \IfFileExists{diagrams/task4_hld_implemented.png}{%
     \includegraphics[width=\textwidth]{diagrams/task4_hld_implemented.png}%
   }{%
-    \textit{[Generate \texttt{task4\_hld\_implemented.png} from
-    \texttt{diagrams/task4\_hld\_implemented.puml} using PlantUML.]}
+    \textit{[Compile \texttt{diagrams/task4\_hld\_implemented.puml} with PlantUML.]}%
   }
-  \caption{Implemented architecture: event-driven modular monolith with SSE push.}
+  \caption{WanderSync implemented architecture: event-driven modular monolith with SSE push.}
 \end{figure}
-
-\subsection{Key Architectural Components}
-
-\begin{mdframed}[backgroundcolor=lightblue, linecolor=accent, linewidth=0.8pt]
-\subsubsection{API Layer}
-The NestJS global prefix \texttt{/api/v1} acts as an internal API Gateway. All inbound requests
-pass through a \texttt{ValidationPipe} (whitelist + transform) and a JWT guard before reaching
-domain modules. A rate-limit middleware (60 req/min per IP) enforces the security NFR at the
-edge.
-\end{mdframed}
-
-\vspace{0.5em}
-
-\begin{mdframed}[backgroundcolor=lightblue, linecolor=accent, linewidth=0.8pt]
-\subsubsection{Disruption Detection Pipeline}
-A \texttt{@Cron(EVERY\_MINUTE)} task invokes \texttt{DisruptionService.runPoll()}, which calls
-the \texttt{FlightTrackerAdapter} and \texttt{WeatherAlertAdapter} concurrently via
-\texttt{Promise.allSettled}. Detected disruptions pass through dual-layer deduplication:
-\begin{enumerate}[leftmargin=1.5em, itemsep=0pt]
-  \item \textbf{Redis SET NX} with a 30-minute TTL (flight) or 24-hour TTL (weather) — fast
-    in-memory reject before any DB write.
-  \item \textbf{DB guard query} — checks for an ACTIVE or recently-resolved (2-hour grace)
-    event matching the same origin and type, preventing races between concurrent CRON executions.
-\end{enumerate}
-Persisted events are emitted to the in-process \texttt{DisruptionEventBus} (RxJS Subject).
-\end{mdframed}
-
-\vspace{0.5em}
-
-\begin{mdframed}[backgroundcolor=lightblue, linecolor=accent, linewidth=0.8pt]
-\subsubsection{Chain of Responsibility — Suggestion Generation}
-The \texttt{DisruptionSuggestionsService} chains three handlers:
-\begin{enumerate}[leftmargin=1.5em, itemsep=0pt]
-  \item \textbf{RuleBasedHandler} — deterministic severity/type lookup table; always produces
-    suggestions for known event types.
-  \item \textbf{LLMHandler} — calls Gemini API for nuanced context-aware suggestions when the
-    rule-based output is absent or the event is high-severity.
-  \item \textbf{FallbackHandler} — returns a generic advice string if both upstream handlers
-    return empty.
-\end{enumerate}
-\end{mdframed}
-
-\vspace{0.5em}
-
-\begin{mdframed}[backgroundcolor=lightblue, linecolor=accent, linewidth=0.8pt]
-\subsubsection{Real-Time Delivery — SSE}
-The \texttt{DisruptionStreamService} maintains one RxJS \texttt{Subject<DisruptionEvent>} per
-connected user. On event emit, it merges the user's per-booking filter stream with the direct
-subject via \texttt{merge()} and maps each event to a \texttt{MessageEvent} (NestJS SSE
-format). The React frontend opens a persistent \texttt{EventSource} connection and renders
-disruption cards within the same render cycle as the SSE frame arrival.
-\end{mdframed}
-
-% ================================================================
-\section{Alternative Architecture: REST-Pull Polling Monolith}
-% ================================================================
-
-The comparison architecture retains the same NestJS modular structure and PostgreSQL storage
-but replaces the event-driven delivery path with a \textbf{REST-pull polling} model: the frontend
-periodically calls \texttt{GET /disruptions} on a fixed interval (30 seconds), and the backend
-responds with the current list of active disruption events read directly from the database.
-
-No EventBus, no Redis deduplication cache, and no SSE connections are required. The disruption
-detection CRON still runs server-side and writes events to the DB; the change is purely in how
-the client learns about those events.
-
-\begin{figure}[H]
-  \centering
-  \IfFileExists{diagrams/task4_hld_alternative.png}{%
-    \includegraphics[width=\textwidth]{diagrams/task4_hld_alternative.png}%
-  }{%
-    \textit{[Generate \texttt{task4\_hld\_alternative.png} from
-    \texttt{diagrams/task4\_hld\_alternative.puml} using PlantUML.]}
-  }
-  \caption{Alternative architecture: REST-pull polling monolith with no real-time push.}
-\end{figure}
-
-\subsection{REST-Pull Design Choices}
-
-\begin{itemize}[leftmargin=1.5em]
-  \item \textbf{No persistent connections.} Each poll creates a short-lived HTTP request;
-    standard load balancers can freely distribute requests across instances.
-  \item \textbf{No state on the server.} The server holds no per-user Subject or Observable;
-    horizontal scaling is straightforward.
-  \item \textbf{Simpler debugging.} Every disruption state change is visible as a DB row; no
-    need to trace in-process event flows.
-  \item \textbf{Higher client-side complexity.} The frontend must manage poll timers, handle
-    stale data, and de-duplicate changes between poll responses.
-\end{itemize}
-
-% ================================================================
-\section{Disruption Detection Sequence}
-% ================================================================
 
 \begin{figure}[H]
   \centering
   \IfFileExists{diagrams/task4_disruption_sequence.png}{%
     \includegraphics[width=\textwidth]{diagrams/task4_disruption_sequence.png}%
   }{%
-    \textit{[Generate \texttt{task4\_disruption\_sequence.png} from
-    \texttt{diagrams/task4\_disruption\_sequence.puml} using PlantUML.]}
+    \textit{[Compile \texttt{diagrams/task4\_disruption\_sequence.puml} with PlantUML.]}%
   }
-  \caption{End-to-end disruption detection and notification delivery (implemented architecture).}
+  \caption{End-to-end disruption detection and delivery sequence.}
 \end{figure}
+
+% ================================================================
+\section{The Architecture We Compared It Against}
+% ================================================================
+
+The natural alternative is a \textbf{REST-pull polling monolith}: identical module structure and
+database, but no EventBus and no SSE. Instead, the frontend periodically sends a
+\texttt{GET /disruptions} request every 30 seconds and re-renders whatever the server returns.
+This is the most common ``good enough'' choice for internal dashboards and admin tools where a
+30-second information delay is acceptable. It is simpler to build, requires no persistent
+connections, and scales horizontally without sticky sessions.
+
+\begin{figure}[H]
+  \centering
+  \IfFileExists{diagrams/task4_hld_alternative.png}{%
+    \includegraphics[width=\textwidth]{diagrams/task4_hld_alternative.png}%
+  }{%
+    \textit{[Compile \texttt{diagrams/task4\_hld\_alternative.puml} with PlantUML.]}%
+  }
+  \caption{Alternative architecture: REST-pull polling monolith without real-time push.}
+\end{figure}
+
+The key structural difference between the two is visible in Figure 3: the polling architecture has
+no persistent server-side state per user, no EventBus, and no Redis deduplication. Everything the
+client knows about disruptions comes from a fresh database read on each poll. This simplicity
+comes at a cost that becomes clear in the NFR quantification below.
 
 % ================================================================
 \section{NFR Quantification}
 % ================================================================
 
-The project proposal defines two directly measurable NFRs for this analysis.
-
 % ----------------------------------------------------------------
-\subsection{NFR 1: Disruption Detection Accuracy}
+\subsection{NFR 1 — Disruption Detection Accuracy}
 % ----------------------------------------------------------------
 
-\textbf{Requirement:} Given 20 simulated disruption test cases (flight delays, cancellations,
-weather alerts), the system must correctly identify and notify the user in at least 17 of 20
-cases (85\% accuracy threshold).
+\textbf{Requirement:} At least 85\% of 20 simulated disruption test cases (flight delays,
+cancellations, diversions, weather alerts) must be correctly identified and trigger a notification.
 
-\textbf{Test harness:} \texttt{src/modules/disruption/disruption.service.nfr2.spec.ts} injects
-20 synthetic \texttt{SimulateDisruptionDto} payloads covering all four \texttt{DisruptionType}
-values and all four severity levels. The test asserts:
-\begin{enumerate}[leftmargin=1.5em, itemsep=0pt]
-  \item \texttt{disruptionEvent.create()} is called exactly 20 times (all events persisted).
-  \item \texttt{publisher.publish()} is called exactly 20 times (all events routed to bus).
-  \item A partial-failure sweep confirms at least 17 of 20 succeed even under injected errors.
-\end{enumerate}
+\textbf{How we measured it.} The file \texttt{disruption.service.nfr2.spec.ts} injects 20 synthetic
+payloads covering all four disruption types and all four severity levels directly into
+\texttt{DisruptionService.simulateDisruption()}, bypassing the external APIs. The test asserts that
+\texttt{disruptionEvent.create()} and \texttt{publisher.publish()} are each called exactly 20 times — confirming that every injected event was both persisted and routed for delivery.
 
 \begin{center}
 \begin{tabular}{@{}lcc@{}}
 \toprule
-\textbf{Architecture} & \textbf{Events persisted / 20} & \textbf{Accuracy} \\
+\textbf{Architecture} & \textbf{Events correctly processed} & \textbf{Accuracy} \\
 \midrule
-Event-Driven SSE (implemented) & 20 / 20 & \textcolor{successgreen}{\textbf{100\%}} \\
-REST-Pull Polling (alternative) & 20 / 20 & \textcolor{successgreen}{\textbf{100\%}} \\
+Event-Driven SSE (implemented) & 20\,/\,20 & \textcolor{successgreen}{\textbf{100\%}} \\
+REST-Pull Polling (alternative) & 20\,/\,20 & \textcolor{successgreen}{\textbf{100\%}} \\
+NFR threshold & — & 85\% \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-\textbf{Interpretation:} Both architectures achieve identical detection accuracy because detection
-is a server-side CRON concern that is decoupled from delivery in both designs. The event-driven
-architecture adds deduplication guards (Redis + DB) that \emph{prevent} false positive counts
-by filtering re-broadcasts of the same physical event; this does not lower accuracy but protects
-against inflated alert counts. The NFR threshold of 85\% is exceeded by both architectures.
+\textbf{What this means in practice.} Both architectures exceed the 85\% threshold because
+disruption \emph{detection} is a server-side concern — the CRON poller, deduplication logic, and
+database write are identical in both designs. The event-driven architecture adds a layer that the
+polling approach lacks: the Redis + database deduplication guard prevents the same storm warning or
+flight delay from being reported repeatedly as new alerts, which would erode user trust over time.
+Without this guard, a weather alert that persists for three hours could generate dozens of
+duplicate notifications in the polling model — technically all ``detected'', but practically
+useless noise for a traveler trying to make a rebooking decision.
 
 % ----------------------------------------------------------------
-\subsection{NFR 2: Notification Delivery Latency}
+\subsection{NFR 2 — Notification Delivery Latency}
 % ----------------------------------------------------------------
 
-\textbf{Requirement:} Core pages (itinerary view, disruption alerts) must load within 3 seconds.
-The spirit of the disruption NFR additionally requires that users receive disruption alerts with
-minimal delay after detection (real-time UX expectation).
+\textbf{Requirement:} Core pages must respond within 3 seconds. For disruption alerts specifically,
+the system should inform the user as quickly as possible after an event is detected — the faster,
+the more useful the re-planning window.
 
-\textbf{Model:} Let $T_{\text{cron}}$ be the time at which the CRON scheduler detects a new
-disruption and persists the event to the database (reference $t = 0$). The \emph{notification
-delivery latency} $L$ is the elapsed time from $T_{\text{cron}}$ to when the client UI renders
-the disruption card.
+\textbf{How we measured it.} We model the delivery latency $L$ as the time elapsed from the moment
+the CRON scheduler finishes persisting a new disruption to the database (time zero) until the
+user's browser renders the disruption card. Each step in the delivery chain contributes a
+measurable delay.
 
-\subsubsection{Event-Driven SSE (Implemented)}
+\subsubsection{Event-Driven SSE path}
 
-The delivery path after $T_{\text{cron}}$:
-\begin{enumerate}[leftmargin=1.5em, itemsep=0pt]
-  \item \texttt{DisruptionEventBus.emit(event)} — synchronous in-process RxJS
-    \texttt{Subject.next()}: $\Delta t_1 \approx 0\,\text{ms}$.
-  \item \texttt{SSEStreamService} maps the event to a \texttt{MessageEvent} and writes
-    the SSE frame to the open HTTP response stream: $\Delta t_2 \approx 5\,\text{ms}$.
-  \item Network delivery of the SSE frame (loopback / LAN): $\Delta t_3 \approx 50\,\text{ms}$.
-  \item React \texttt{onmessage} handler re-renders the disruption list: $\Delta t_4 \approx
-    16\,\text{ms}$ (one frame at 60 fps).
+\begin{enumerate}[leftmargin=1.5em, itemsep=2pt]
+  \item \textbf{In-process event dispatch} — \texttt{EventBus.emit()} calls a synchronous RxJS
+    \texttt{Subject.next()}: no network, no serialisation. $\Delta t_1 \approx 0$ ms.
+  \item \textbf{SSE frame construction and write} — the SSE service serialises the event to JSON
+    and writes it to the open HTTP response stream: $\Delta t_2 \approx 5$ ms.
+  \item \textbf{Network delivery} — the SSE frame travels over the open keep-alive connection to
+    the browser (loopback or local network): $\Delta t_3 \approx 50$ ms.
+  \item \textbf{React re-render} — the \texttt{onmessage} handler updates the Zustand store and
+    React schedules one re-render: $\Delta t_4 \approx 16$ ms (one frame at 60 fps).
 \end{enumerate}
 
 \[
@@ -290,24 +187,21 @@ The delivery path after $T_{\text{cron}}$:
                  \approx 0 + 5 + 50 + 16 = \mathbf{71\,\text{ms}}
 \]
 
-\subsubsection{REST-Pull Polling (Alternative)}
+\subsubsection{REST-Pull Polling path}
 
-Let $P = 30\,\text{s}$ be the client poll interval. The client issues its next poll at a uniformly
-random time $U \in [0, P]$ after $T_{\text{cron}}$. After the poll, the server executes a DB
-query and returns the JSON response in $\approx 50\,\text{ms}$.
+The client fires a poll at a uniformly random time $U \in [0, 30{,}000]\,\text{ms}$ after the
+event is persisted. After the poll, the server runs a database query and returns the response in
+approximately 50 ms.
 
 \[
-  L_{\text{poll}} = U + 50\,\text{ms}, \quad U \sim \text{Uniform}(0, 30000\,\text{ms})
+  L_{\text{poll}} = U + 50\,\text{ms}, \quad U \sim \mathrm{Uniform}(0,\,30{,}000\,\text{ms})
 \]
 
 \[
-  \mathbb{E}[L_{\text{poll}}] = \frac{P}{2} + 50 = 15{,}000 + 50 = \mathbf{15{,}050\,\text{ms}}
+  \mathbb{E}[L_{\text{poll}}] = \tfrac{30{,}000}{2} + 50 = \mathbf{15{,}050\,\text{ms}}
+  \qquad
+  L_{\text{poll}}^{\max} = \mathbf{30{,}050\,\text{ms}}
 \]
-\[
-  L_{\text{poll}}^{\max} = P + 50 = \mathbf{30{,}050\,\text{ms}}
-\]
-
-\subsubsection{Comparison Table}
 
 \begin{center}
 \begin{tabular}{@{}lcc@{}}
@@ -316,188 +210,114 @@ query and returns the JSON response in $\approx 50\,\text{ms}$.
 \midrule
 Mean delivery latency & \textcolor{successgreen}{\textbf{71 ms}} & \textcolor{warningorange}{15,050 ms} \\
 Maximum delivery latency & \textcolor{successgreen}{\textbf{$\sim$100 ms}} & \textcolor{warningorange}{30,050 ms} \\
-Latency ratio (mean) & 1$\times$ & 212$\times$ \\
-Persistent server connections & 1 per active user & 0 \\
+Speed advantage & 212$\times$ faster & — \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-\textbf{Interpretation:} The event-driven SSE architecture delivers disruption notifications
-\textbf{212$\times$ faster} on average than a 30-second polling alternative. The 3-second page
-load NFR is satisfied under both architectures for the initial page render (a single DB read);
-the meaningful distinction appears in the real-time disruption alerting path, where polling fails
-to meet any reasonable real-time expectation.
+\textbf{What this means for a traveler.} A 71 ms delay is imperceptible — the disruption card
+appears on screen before the user has consciously registered that the page has changed. A
+15,050 ms mean delay is a different experience entirely: the traveler might be looking at a stale
+screen for anywhere from half a second to thirty seconds, not knowing their connecting flight has
+just been cancelled. In an airport, thirty seconds is the difference between reaching the rebooking
+desk while it is short and joining a queue of fifty people who all received the same alert moments
+earlier. The 212$\times$ speed advantage of the event-driven path is not a micro-optimisation; it
+is the difference between being proactive and being reactive.
 
 % ----------------------------------------------------------------
-\subsection{NFR 3: Throughput Under Concurrent Users}
+\subsection{NFR 3 — Request Throughput Under Concurrent Load}
 % ----------------------------------------------------------------
 
-\textbf{Scenario:} $N = 100$ concurrent users with the Disruption Page open simultaneously.
+\textbf{Scenario:} 100 users have the Disruption Page open simultaneously.
 
-\subsubsection{Event-Driven SSE (Implemented)}
+With polling, each user fires two requests per minute (one every 30 seconds), producing
+$100 \times 2 = 200$ disruption endpoint calls per minute. Each call involves JWT validation, a
+database read, and JSON serialisation. This load is proportional to the number of connected users
+— doubling the user base doubles the polling load with no increase in information value, since the
+underlying disruption data does not change that frequently.
 
-Each user holds one persistent SSE connection (one HTTP keep-alive response). The only
-recurring DB load is the CRON poller — one batch query per minute fetching all future
-non-disrupted bookings. Server-side event dispatch is one in-memory \texttt{Subject.next()}
-call per user, per detected event.
-
-\[
-  \text{DB queries/min} = 1_{\text{(CRON)}} + \text{write(s)}_{\text{(events detected)}}
-\]
-
-\subsubsection{REST-Pull Polling (Alternative)}
-
-Each of the 100 users polls every 30 seconds: $\frac{100 \times 60}{30} = 200$ disruption
-endpoint requests per minute. Each request requires a JWT validation, a DB query, and JSON
-serialisation (estimated 50 ms server-side). At saturation:
-
-\[
-  \text{Concurrent DB connections used} = 200\,\text{req/min} \times 50\,\text{ms} \approx
-  0.17\,\text{conn} \;\text{(steady-state)}
-\]
-
-While the instantaneous DB load is modest at 100 users, it grows linearly with $N$ and adds
-no throughput benefit; the SSE model does \emph{not} add DB load proportional to $N$.
+With SSE, each user holds one persistent connection. The only recurring database load comes from
+the CRON poller — a single batch query per minute regardless of how many users are connected. Event
+dispatch is in-memory and adds no database load per user.
 
 \begin{center}
 \begin{tabular}{@{}lcc@{}}
 \toprule
-\textbf{Metric (100 users)} & \textbf{Event-Driven SSE} & \textbf{REST-Pull (30 s)} \\
+\textbf{Metric (100 connected users)} & \textbf{Event-Driven SSE} & \textbf{REST-Pull (30 s)} \\
 \midrule
-Disruption endpoint requests/min & \textcolor{successgreen}{\textbf{0}} & \textcolor{warningorange}{200} \\
-Persistent connections & 100 (SSE) & 0 \\
-DB queries from disruption delivery & \textcolor{successgreen}{\textbf{0}} & \textcolor{warningorange}{200/min} \\
-Scales with $N$ (delivery load) & \textcolor{successgreen}{\textbf{No}} & \textcolor{warningorange}{Yes (linear)} \\
+Disruption API requests per minute & \textcolor{successgreen}{\textbf{0}} & \textcolor{warningorange}{200} \\
+Database reads from delivery path & \textcolor{successgreen}{\textbf{0}} & \textcolor{warningorange}{200/min} \\
+Delivery load scales with users? & \textcolor{successgreen}{\textbf{No}} & \textcolor{warningorange}{Yes (linear)} \\
 \bottomrule
 \end{tabular}
 \end{center}
 
 % ================================================================
-\section{Trade-Off Analysis}
+\section{Trade-off Analysis}
 % ================================================================
 
-\subsection{Event-Driven SSE vs.\ REST-Pull Polling}
+No architecture decision comes without trade-offs. The table below summarises the most important
+ones between the two approaches, followed by a plain-language discussion of each.
 
-\begin{longtable}{@{}L{3.2cm}L{5.5cm}L{5.5cm}@{}}
+\begin{longtable}{@{}L{2.8cm}L{5.6cm}L{5.6cm}@{}}
 \toprule
 \textbf{Dimension} & \textbf{Event-Driven SSE (implemented)} & \textbf{REST-Pull Polling (alternative)} \\
 \midrule
 \endhead
 
-\textbf{Notification latency} &
-  \textcolor{successgreen}{71 ms mean}. Real-time user experience; disruption cards appear
-  immediately without user action. &
-  \textcolor{warningorange}{15,050 ms mean (30 s poll)}. Requires user to wait up to 30 s
-  before seeing a new alert. \\[0.5em]
+\textbf{Notification speed} &
+  \textcolor{successgreen}{71 ms mean} — the user sees the alert before they are consciously
+  aware the page updated. &
+  \textcolor{warningorange}{15 s mean} — meaningful delay in time-sensitive travel scenarios. \\[0.5em]
 
-\textbf{Server-side state} &
-  \textcolor{warningorange}{Stateful}: one RxJS Subject per connected user. Server process holds
-  O(\textit{N}) objects in memory. &
-  \textcolor{successgreen}{Stateless}: no per-user server objects. Trivially horizontally
-  scalable across multiple instances. \\[0.5em]
+\textbf{Server complexity} &
+  \textcolor{warningorange}{Higher.} Maintaining one RxJS Subject per active user, managing
+  SSE keep-alive, and implementing dual-layer deduplication requires more engineering effort. &
+  \textcolor{successgreen}{Lower.} A standard REST controller reading from a database is the
+  simplest possible implementation, easy to reason about and test. \\[0.5em]
 
-\textbf{DB load (delivery)} &
-  \textcolor{successgreen}{Zero}: events are pushed from memory after the initial CRON
-  DB write. No read query on notification path. &
-  \textcolor{warningorange}{Linear}: every client poll triggers a \texttt{SELECT} on the
-  disruption table. Grows with user count and poll frequency. \\[0.5em]
+\textbf{Horizontal scaling} &
+  \textcolor{warningorange}{Needs sticky sessions} or a shared pub/sub broker (e.g.\ Redis
+  Pub/Sub) because the in-process EventBus is invisible to other server instances. &
+  \textcolor{successgreen}{Trivially scalable} — any load balancer can route stateless poll
+  requests to any server replica. \\[0.5em]
 
-\textbf{Infrastructure} &
-  \textcolor{warningorange}{Requires sticky sessions or a shared EventBus (e.g.\ Redis
-  Pub/Sub) if scaled to multiple server instances}. The in-process bus only works within
-  one process. &
-  \textcolor{successgreen}{No special infrastructure}: any HTTP load balancer can route
-  poll requests. No shared state between instances. \\[0.5em]
+\textbf{Database load from delivery} &
+  \textcolor{successgreen}{Zero} — events are dispatched from memory after the initial write.
+  The delivery path adds no database pressure. &
+  \textcolor{warningorange}{Linear with users} — each poll is a fresh database read. Under
+  high concurrency this becomes a meaningful bottleneck. \\[0.5em]
 
-\textbf{Complexity} &
-  \textcolor{warningorange}{Higher}: RxJS Observables, SSE response lifecycle, per-user
-  Subject management, dedup keys, event routing by booking refs. &
-  \textcolor{successgreen}{Lower}: a simple REST controller + DB query. Easier to test,
-  debug, and reason about. \\[0.5em]
+\textbf{Infrastructure cost} &
+  One persistent SSE connection per active user. Proxies and firewalls may close idle connections;
+  keep-alive tuning is required in production. &
+  No persistent connections — short-lived HTTP requests with standard semantics. Firewall-friendly. \\[0.5em]
 
-\textbf{Connection overhead} &
-  One long-lived HTTP connection per active user (EventSource). Firewall / proxy timeout
-  risks; keep-alive headers required. &
-  Short-lived request per poll; no persistent connection management. Standard HTTP semantics. \\[0.5em]
-
-\textbf{Suitability} &
-  Correct choice when real-time notification delivery is an explicit quality requirement and
-  the deployment is a single process or behind a sticky load balancer. &
-  Correct choice when simplicity, horizontal scalability, and statelessness outweigh
-  notification latency — for example, a batch-oriented reporting dashboard. \\
+\textbf{Right choice when\ldots} &
+  The product's value proposition depends on real-time information delivery (travel disruptions,
+  financial alerts, emergency notifications). &
+  The information updates infrequently or users tolerate a short delay (analytics dashboards,
+  report generators, admin tools). \\
 \bottomrule
 \end{longtable}
 
-\subsection{Why the Implemented Architecture is the Right Choice for WanderSync}
+\subsection{Why the Implemented Architecture is Correct for WanderSync}
 
-WanderSync's disruption NFR is fundamentally a \emph{real-time} requirement: a traveller whose
-flight is cancelled needs to know immediately, not after a 30-second polling cycle. The 212$\times$
-latency advantage of the SSE path directly serves this requirement. The trade-offs (server-side
-state, sticky-session dependency at scale) are acceptable for a prototype deployed on a single
-server process. If the system were to scale beyond one instance, the migration path is
-well-defined: replace the in-process \texttt{DisruptionEventBus} with Redis Pub/Sub while
-retaining the SSE delivery contract — the frontend \texttt{EventSource} connection is unchanged.
+WanderSync's disruption notification is not a reporting feature — it is a time-critical safety
+net. A traveler who misses a gate change or fails to rebook before a flight fills up faces real,
+material costs. The event-driven SSE approach exists specifically to eliminate the window of
+ignorance between when the system knows about a disruption and when the traveler does.
 
-The REST-pull alternative would be the correct choice if the system prioritised \textbf{horizontal
-scalability} and \textbf{operational simplicity} over delivery latency — for instance, in a
-travel analytics dashboard where near-real-time is not required.
+The trade-offs accepted — server-side state per connection, the need for sticky sessions at scale,
+the added complexity of the EventBus and deduplication logic — are all acceptable for a system
+that runs within a single process during the prototype phase. If WanderSync were to scale to
+multiple server instances, the migration path is straightforward: replace the in-process RxJS
+EventBus with Redis Pub/Sub, a change that is entirely internal to the Disruption module and
+invisible to the frontend's \texttt{EventSource} connection.
 
-% ================================================================
-\section{Individual Contributions}
-% ================================================================
-
-\begin{tabularx}{\textwidth}{@{}lX@{}}
-\toprule
-\textbf{Member} & \textbf{Contribution} \\
-\midrule
-etude11 (Krish Jalan) &
-  Auth subsystem (JWT strategy, bcrypt, role guards, rate-limit middleware), API gateway
-  configuration, frontend routing and app shell setup, environment and dependency management. \\
-manasimundada (Manasi Mundada) &
-  Itinerary CRUD service and controller (eager-load bookings, chronological ordering, stats),
-  itinerary frontend (optimistic updates, timeline view), AviationStack booking strategy
-  cleanup, itinerary API client. \\
-udaybindal01 (Uday Bindal) &
-  Disruption detection pipeline (CRON poller, FlightTracker and WeatherAlert adapters,
-  dual-layer deduplication, simulate-demo endpoint), SSE stream service, in-process EventBus,
-  Chain of Responsibility suggestion pipeline (rule-based, LLM, fallback handlers), NFR test
-  harness. \\
-Fane1824 (Ishaan Romil) &
-  Disruption UI (suggestions panel, disruption page, simulate-disruption button), notification
-  UI (notification panel, read/unread state), app layout shell, booking card component,
-  itinerary page UI integration. \\
-\bottomrule
-\end{tabularx}
-
-\vspace{1em}
-
-\noindent\textbf{Repository:}
-\url{https://github.com/etude11/WanderSync-SE}
-
-% ================================================================
-\section{Lessons Learned}
-% ================================================================
-
-\begin{enumerate}[leftmargin=1.5em]
-  \item \textbf{Dual-layer deduplication is necessary.} A Redis-only TTL cache failed on Redis
-    environments that do not support the \texttt{SET NX EX} command (Windows native Redis).
-    Adding a DB guard as a second layer made the deduplication robust across environments
-    without degrading performance on the happy path.
-  \item \textbf{In-process EventBus is simpler than Redis Streams for the SSE path.}
-    The initial design routed events through Redis Streams for the SSE delivery path. In
-    practice, the extra serialisation round-trip added latency without benefit in a
-    single-process deployment. Switching to an in-process RxJS Subject reduced the delivery
-    latency from $\sim$200\,ms to $\sim$71\,ms.
-  \item \textbf{ValidationPipe and frontend API contract must stay in sync.}
-    A breaking schema mismatch (e.g.\ renaming \texttt{providerKey} to \texttt{provider})
-    caused optimistic UI updates to silently succeed while backend writes were rejected by
-    \texttt{forbidNonWhitelisted: true}. Systematic contract tests across the API boundary
-    would catch this class of error earlier.
-  \item \textbf{Chain of Responsibility enables graceful degradation.}
-    When the Gemini API key is absent or rate-limited, the CoR chain falls through to the
-    rule-based handler and ultimately the fallback handler without exposing an error to the
-    user. This pattern makes the suggestion feature production-safe despite external
-    API dependency.
-\end{enumerate}
+The REST-pull approach would be the correct choice if WanderSync were a travel analytics
+dashboard or a bulk itinerary export tool — scenarios where a 30-second information lag causes
+no user harm. It is not the right choice for a product that aims to be the first thing a traveler
+checks when their plans fall apart.
 
 \end{document}
