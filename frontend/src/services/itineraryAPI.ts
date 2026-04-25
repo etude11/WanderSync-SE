@@ -59,4 +59,7 @@ export const itineraryAPI = {
 
   lookupTransport: (type: string, origin: string, destination: string) =>
     api.get<TransportRoute[]>(`/bookings/lookup/transport?type=${encodeURIComponent(type)}&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}`),
+
+  summarize: (id: string) =>
+    api.post<{ summary: string }>(`/itineraries/${id}/summarize`),
 };

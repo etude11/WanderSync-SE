@@ -71,4 +71,9 @@ export class ItineraryController {
   ) {
     return this.itineraryService.removeBooking(id, bookingId, user.userId);
   }
+
+  @Post(':id/summarize')
+  summarize(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.itineraryService.summarize(id, user.userId);
+  }
 }

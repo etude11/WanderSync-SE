@@ -18,13 +18,16 @@ export class AviationstackFlightStrategy implements IBookingStrategy {
 
   private readonly logger = new Logger(AviationstackFlightStrategy.name);
   private readonly apiKey: string;
-  private static readonly BASE = 'http://api.aviationstack.com/v1/flights';
+  private readonly base: string;
 
   constructor(apiKeyOrConfig: string | ConfigService) {
-    this.apiKey =
-      typeof apiKeyOrConfig === 'string'
-        ? apiKeyOrConfig
-        : (apiKeyOrConfig.get<string>('aviationstack.apiKey') ?? '');
+    if (typeof apiKeyOrConfig === 'string') {
+      this.apiKey = apiKeyOrConfig;
+      this.base = 'http://api.aviationstack.com/v1/flights';
+    } else {
+      this.apiKey = apiKeyOrConfig.get<string>('aviationstack.apiKey') ?? '';
+      this.base = apiKeyOrConfig.get<string>('aviationstack.baseUrl') ?? 'http://api.aviationstack.com/v1/flights';
+    }
   }
 
   async fetchAndNormalize(refs: string[]): Promise<NormalizedBooking[]> {
@@ -42,7 +45,7 @@ export class AviationstackFlightStrategy implements IBookingStrategy {
 
   private async fetchOne(iata: string): Promise<NormalizedBooking | null> {
     const { data } = await axios.get<{ data: AviationStackFlight[] }>(
-      AviationstackFlightStrategy.BASE,
+      this.base,
       { params: { access_key: this.apiKey, flight_iata: iata }, timeout: 5000 },
     );
 
