@@ -1,0 +1,65 @@
+@startuml task4_hld_alternative
+skinparam defaultFontName Helvetica
+skinparam backgroundColor #FAFAFA
+skinparam ArrowColor #333333
+skinparam componentBackgroundColor #FDEBD0
+skinparam databaseBackgroundColor #EBF5EB
+skinparam cloudBackgroundColor #FEF9E7
+skinparam packageBackgroundColor #F8F9FA
+skinparam componentBorderColor #E67E22
+skinparam noteBorderColor #888888
+skinparam shadowing false
+skinparam defaultFontSize 11
+
+title WanderSync — Alternative Architecture: REST-Pull Polling Monolith
+
+package "Browser Client (React / Vite)" {
+  component [Auth Pages] as AUTH_UI
+  component [Itinerary Page] as ITIN_UI
+  component [Disruption Page\n(setInterval poll)] as DISR_UI #FDEBD0
+  component [Notification Panel\n(setInterval poll)] as NOTIF_UI #FDEBD0
+}
+
+package "NestJS Monolith  :3000" {
+  component [Auth Module] as AUTH
+  component [Booking Module] as BOOK
+  component [Itinerary Module] as ITIN
+  component [Disruption Module\n(CRON writer only)] as DISR
+  component [Notification Module\n(DB query)] as NOTIF
+  component [Social Module] as SOC
+}
+
+database "PostgreSQL\n(shared read/write)" as PG #EBF5EB
+
+cloud "External APIs" {
+  component [AviationStack] as AVIA
+  component [OpenWeatherMap] as OWM
+}
+
+AUTH_UI --> AUTH : POST /auth/**
+ITIN_UI --> ITIN : REST /itineraries/**
+
+DISR_UI --> DISR : GET /disruptions\n(poll every 30 s)
+NOTIF_UI --> NOTIF : GET /notifications\n(poll every 30 s)
+
+AUTH --> PG
+ITIN --> PG
+DISR --> PG : INSERT DisruptionEvent
+DISR --> AVIA : CRON poll
+DISR --> OWM : CRON poll
+
+note right of DISR_UI
+  100 users × 2 req/min =
+  200 poll requests/min.
+  Mean notification latency
+  = 15,050 ms (avg 15 s wait).
+end note
+
+note bottom of PG
+  All modules share one DB.
+  No event bus — disruption
+  delivery requires client poll.
+  No real-time push possible.
+end note
+
+@enduml

@@ -1,0 +1,79 @@
+@startuml task4_hld_implemented
+skinparam defaultFontName Helvetica
+skinparam backgroundColor #FAFAFA
+skinparam ArrowColor #333333
+skinparam componentBackgroundColor #EAF2FB
+skinparam databaseBackgroundColor #EBF5EB
+skinparam cloudBackgroundColor #FEF9E7
+skinparam packageBackgroundColor #F8F9FA
+skinparam componentBorderColor #2E86C1
+skinparam noteBorderColor #888888
+skinparam shadowing false
+skinparam defaultFontSize 11
+
+title WanderSync — Implemented Architecture: Event-Driven Modular Monolith
+
+package "Browser Client (React 19 / Vite)" {
+  component [Auth Pages] as AUTH_UI
+  component [Itinerary Page] as ITIN_UI
+  component [Disruption Page\n+ SSE listener] as DISR_UI
+  component [Notification Panel] as NOTIF_UI
+}
+
+package "NestJS Monolith  :3000" {
+  component [Auth Module\n(JWT Strategy)] as AUTH
+  component [Booking Module\n(Adapter pattern)] as BOOK
+  component [Itinerary Module\n(CRUD + eager load)] as ITIN
+  component [Disruption Module\n(CRON poller + CoR)] as DISR
+  component [Notification Module\n(Redis consumer)] as NOTIF
+  component [Social Module\n(ConsentState)] as SOC
+
+  component "In-Process EventBus\n(RxJS Subject)" as EB #LightBlue
+  component "SSE Stream Service\n(Observable per user)" as SSE #LightGreen
+}
+
+database "PostgreSQL\n(Prisma ORM)" as PG #EBF5EB
+database "Redis\n(dedup cache +\nStreams)" as REDIS #FEF9E7
+
+cloud "External APIs" {
+  component [AviationStack\nFlight API] as AVIA
+  component [OpenWeatherMap\nAPI] as OWM
+  component [Gemini LLM\n(CoR fallback)] as GEMINI
+}
+
+AUTH_UI --> AUTH : POST /auth/login\nPOST /auth/register
+ITIN_UI --> ITIN : REST /itineraries/**
+DISR_UI --> DISR : GET /disruptions/**\nEventSource (SSE)
+NOTIF_UI --> NOTIF : GET /notifications/**
+
+AUTH --> PG : read/write User
+ITIN --> PG : read/write Itinerary\n+ BookingRecord
+DISR --> PG : read/write DisruptionEvent\n+ DisruptionAck
+NOTIF --> PG : write NotificationLog
+
+DISR --> AVIA : CRON poll\n(flight refs)
+DISR --> OWM : CRON poll\n(IATA origins)
+DISR ..> GEMINI : CoR LLM fallback\n(suggestion gen)
+DISR --> REDIS : SET NX dedup keys\n(30min / 24h TTL)
+NOTIF --> REDIS : XREADGROUP\n(every 5 s)
+
+DISR --> EB : emit(DisruptionEvent)
+EB --> SSE : onEvent()
+SSE --> DISR_UI : SSE frame push\n(~50 ms latency)
+
+BOOK --> AVIA : validate booking ref
+
+note right of EB
+  In-process bus eliminates
+  network hop for real-time
+  push. No external broker
+  needed at prototype scale.
+end note
+
+note bottom of REDIS
+  Dual-layer deduplication:
+  Redis TTL (fast reject) +
+  DB guard (correctness).
+end note
+
+@enduml

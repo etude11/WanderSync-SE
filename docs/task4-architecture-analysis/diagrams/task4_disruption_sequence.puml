@@ -1,0 +1,64 @@
+@startuml task4_disruption_sequence
+skinparam defaultFontName Helvetica
+skinparam backgroundColor #FAFAFA
+skinparam sequenceArrowColor #2E86C1
+skinparam sequenceLifeLineBorderColor #888888
+skinparam sequenceParticipantBorderColor #2E86C1
+skinparam sequenceParticipantBackgroundColor #EAF2FB
+skinparam noteBackgroundColor #FEF9E7
+skinparam noteBorderColor #888888
+skinparam shadowing false
+skinparam defaultFontSize 11
+
+title Disruption Detection — End-to-End Sequence (Implemented Architecture)
+
+actor "NestJS Scheduler\n(CRON every 60 s)" as CRON
+participant "DisruptionService" as DS
+participant "FlightTracker\nAdapter" as FTA
+participant "WeatherAlert\nAdapter" as WA
+participant "Redis" as REDIS
+participant "PostgreSQL" as PG
+participant "EventBus\n(RxJS Subject)" as EB
+participant "SSEStream\nService" as SSE
+actor "Client Browser\n(EventSource)" as CB
+
+CRON -> DS: runPoll()
+note right of DS: Fetches all future\nnon-disrupted bookings
+
+activate DS
+DS -> FTA: checkFlights(flightRefs)
+DS -> WA: checkWeather(origins)
+
+FTA --> DS: DetectedDisruption[]
+WA --> DS: DetectedDisruption[]
+
+loop for each DetectedDisruption
+  DS -> REDIS: SET NX dedup-key EX TTL
+  alt cache miss (new event)
+    REDIS --> DS: OK
+    DS -> PG: disruptionEvent.create()
+    PG --> DS: DisruptionEvent {id, type, severity, ...}
+
+    DS -> EB: emit(event)
+    note right of EB: In-process synchronous\nRxJS Subject.next()
+
+    EB -> SSE: onEvent(event)
+    SSE -> CB: SSE frame\n(data: JSON, id: eventId)
+    note right of CB: Client renders\ndisruption alert card
+  else cache hit (duplicate)
+    REDIS --> DS: nil
+    DS -> DS: skip (already processed)
+  end
+end
+
+deactivate DS
+
+note over DS, CB
+  Total latency (detection → client render):
+  • In-process dispatch: ~0 ms
+  • SSE serialisation + delivery: ~50 ms
+  • Worst case total: ~50 ms per event
+  (vs 15,050 ms mean for REST-pull polling)
+end note
+
+@enduml
