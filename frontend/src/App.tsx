@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import PrivateRoute from '@/components/Auth/PrivateRoute';
 import AppLayout from '@/components/Layout/AppLayout';
@@ -9,8 +10,22 @@ import ItineraryPage from '@/pages/ItineraryPage';
 import DisruptionPage from '@/pages/DisruptionPage';
 import SocialPage from '@/pages/SocialPage';
 import NotificationsPage from '@/pages/NotificationsPage';
+import { useAuthStore } from '@/store/authStore';
+import { authAPI } from '@/services/authAPI';
 
 export default function App() {
+  const { token, user, setAuth, clearAuth } = useAuthStore();
+
+  // Rehydrate user object after page refresh — token persists in localStorage
+  // but Zustand state (user) is lost; re-fetch profile once on mount.
+  useEffect(() => {
+    if (token && !user) {
+      authAPI.me()
+        .then(res => setAuth(res.data, token))
+        .catch(() => clearAuth());
+    }
+  }, []);
+
   return (
     <BrowserRouter>
       <Routes>

@@ -20,8 +20,16 @@ export default () => ({
   },
   aviationstack: {
     apiKey: process.env.AVIATIONSTACK_API_KEY ?? "",
+    baseUrl: process.env.AVIATIONSTACK_BASE_URL ?? "http://api.aviationstack.com/v1/flights",
   },
   openweathermap: {
     apiKey: process.env.OWM_API_KEY ?? "",
+    baseUrl: process.env.OWM_BASE_URL ?? "https://api.openweathermap.org/data/3.0/onecall",
+  },
+  gemini: {
+    apiKey: process.env.GEMINI_API_KEY ?? "",
+  },
+  mockApi: {
+    baseUrl: process.env.MOCK_API_BASE_URL ?? "http://localhost:3002",
   },
 });

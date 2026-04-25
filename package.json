@@ -27,7 +27,7 @@
   },
   "homepage": "https://github.com/etude11/WanderSync-SE#readme",
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.91.0",
+    "@google/generative-ai": "^0.24.1",
     "@nestjs/axios": "^4.0.1",
     "@nestjs/common": "^11.1.19",
     "@nestjs/config": "^4.0.4",
